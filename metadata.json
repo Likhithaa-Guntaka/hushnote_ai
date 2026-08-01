@@ -1,0 +1,6 @@
+{
+  "name": "HushNote",
+  "description": "A privacy-first local-first AI note drafting assistant for therapists that keeps only the approved note.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

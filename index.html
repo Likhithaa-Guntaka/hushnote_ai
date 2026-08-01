@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HushNote - Privacy-First Therapist Note Assistant</title>
+  
+  <!-- Material Symbols & Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/src/index.css" />
+</head>
+<body class="font-body min-h-screen flex flex-col bg-[#FDFBF7] text-[#33322E]">
+
+  <!-- Shared Header -->
+  <header class="w-full px-8 py-4 max-w-7xl mx-auto flex justify-between items-center z-50 border-b border-[#E6E2D3] bg-[#FDFBF7]">
+    <div class="flex items-center gap-3 cursor-pointer" onclick="window.HushNoteApp?.resetSessionState()">
+      <div class="w-8 h-8 bg-[#5A5A40] rounded-lg flex items-center justify-center text-white font-bold text-xs shadow-sm">
+        HN
+      </div>
+      <h1 class="text-xl font-semibold tracking-tight text-[#5A5A40] font-display">HushNote</h1>
+    </div>
+    <div class="flex items-center gap-4">
+      <div class="flex items-center gap-2 text-xs font-medium text-[#8A8471] bg-[#F3F0E6] px-3 py-1.5 rounded-full border border-[#E6E2D3]">
+        <span class="w-2 h-2 bg-emerald-600 rounded-full animate-pulse"></span>
+        <span class="uppercase tracking-wider text-[11px] font-semibold">LOCAL OLLAMA (GEMMA 4) CONNECTED</span>
+      </div>
+      <button class="text-xs font-semibold text-[#5A5A40] hover:underline flex items-center gap-1" title="Privacy Settings">
+        <span class="material-symbols-outlined text-base">privacy_tip</span>
+        <span>Settings</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- SCREEN 1: LANDING / HERO -->
+  <div id="home-screen" class="flex-grow flex flex-col items-center justify-center text-center px-6 relative cinematic-transition">
+    <div class="relative z-10 mb-10 space-y-4 max-w-2xl">
+      <div class="inline-flex items-center gap-1.5 px-4 py-1.5 bg-[#E6EBDD] text-[#5A5A40] rounded-full text-xs font-bold border border-[#E6E2D3] mb-2 uppercase tracking-wider">
+        <span class="material-symbols-outlined text-sm">security</span>
+        <span>Processed locally • Zero cloud audio retention</span>
+      </div>
+      <h1 class="font-display text-4xl sm:text-5xl font-bold tracking-tight text-[#33322E] leading-tight">
+        Record. Review.<br/>Keep only the note.
+      </h1>
+      <p class="text-base sm:text-lg text-[#8A8471] leading-relaxed">
+        A privacy-first clinical note workflow for therapists. High-fidelity DAP & SOAP progress documentation without permanent audio storage.
+      </p>
+    </div>
+
+    <!-- Interactive Sound Orb Button -->
+    <div id="startSessionBtn" class="relative group cursor-pointer orb-hover transition-all duration-500 mb-8">
+      <div class="w-64 h-64 sm:w-80 sm:h-80 rounded-full bg-gradient-to-tr from-[#F3F0E6] via-[#E6EBDD]/60 to-[#FAF8F2] flex items-center justify-center shadow-md border border-[#E6E2D3] relative overflow-hidden">
+        <div class="absolute inset-0 bg-[#5A5A40]/10 rounded-full animate-pulse opacity-25"></div>
+        <div class="bg-[#5A5A40] text-white px-8 py-4 rounded-full shadow-lg font-display font-bold text-xl flex items-center gap-2 group-hover:bg-[#4a4a35] transition-all">
+          <span class="material-symbols-outlined">mic</span>
+          <span>Start Session</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="text-xs text-[#8A8471] max-w-md">
+      HIPAA compliant architecture. Audio snippet remains only in temporary client memory and is purged upon note approval.
+    </div>
+  </div>
+
+  <!-- SCREEN 2: INFORMED CONSENT -->
+  <div id="consent-screen" class="fixed inset-0 bg-[#FDFBF7]/95 backdrop-blur-md flex flex-col items-center justify-center p-6 z-50 hidden transition-all duration-500">
+    <div class="max-w-xl w-full space-y-6 text-left bg-[#FAF8F2] p-8 rounded-2xl shadow-md border border-[#E6E2D3]">
+      <div class="flex items-center gap-3 text-[#5A5A40]">
+        <div class="w-12 h-12 rounded-lg bg-[#E6EBDD] flex items-center justify-center text-[#5A5A40]">
+          <span class="material-symbols-outlined text-2xl">verified_user</span>
+        </div>
+        <div>
+          <h2 class="font-display text-2xl font-bold text-[#33322E]">Informed Consent</h2>
+          <p class="text-xs text-[#8A8471]">Prioritize ethical practice and client trust before beginning recording.</p>
+        </div>
+      </div>
+
+      <div class="space-y-4">
+        <label class="flex items-start gap-3 p-4 bg-white/80 rounded-xl cursor-pointer hover:bg-white transition-colors border border-[#E6E2D3]">
+          <!-- TARGET ELEMENT ID: consentCheckbox -->
+          <input type="checkbox" id="consentCheckbox" class="mt-1 h-5 w-5 rounded border-[#E6E2D3] text-[#5A5A40] focus:ring-[#5A5A40] cursor-pointer" />
+          <span class="text-sm font-medium text-[#33322E] leading-relaxed">
+            I confirm the client consented to audio transcription and AI-assisted clinical note drafting for this session.
+          </span>
+        </label>
+
+        <div class="flex gap-3 p-4 bg-[#F3F0E6] rounded-xl border border-[#E6E2D3]">
+          <span class="material-symbols-outlined text-[#5A5A40]">shield</span>
+          <div class="text-xs text-[#8A8471] leading-relaxed">
+            <strong class="text-[#5A5A40] font-semibold block mb-0.5">Confidentiality Guarantee:</strong>
+            Raw audio and transcripts are permanently erased immediately after note approval. No data is stored for model training.
+          </div>
+        </div>
+      </div>
+
+      <div class="flex gap-4 pt-4">
+        <button id="backConsentBtn" class="flex-1 py-3 border border-[#5A5A40] text-[#5A5A40] font-semibold rounded-lg hover:bg-[#F3F0E6] transition-colors text-sm" onclick="window.HushNoteApp?.showScreen('home-screen')">
+          Back
+        </button>
+        <!-- TARGET ELEMENT ID: confirmConsentBtn -->
+        <button id="confirmConsentBtn" class="flex-1 py-3 bg-[#5A5A40] text-white font-semibold rounded-lg hover:bg-[#4a4a35] transition-all opacity-40 shadow-sm text-sm" disabled>
+          Confirm & Proceed
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCREEN 3: RECORDING & TRANSCRIPT -->
+  <div id="recording-screen" class="flex-grow flex flex-col items-center justify-between px-6 pt-6 pb-24 max-w-4xl mx-auto w-full hidden">
+    <!-- Recording Visualizer Header -->
+    <div class="flex flex-col items-center text-center space-y-3 w-full">
+      <div class="flex items-center gap-2 px-3 py-1 bg-[#E6EBDD] text-[#5A5A40] rounded-full text-xs font-bold uppercase tracking-wider border border-[#E6E2D3]">
+        <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+        <span>Recording Session</span>
+      </div>
+      <!-- TARGET ELEMENT ID: recordingTimer -->
+      <h1 id="recordingTimer" class="font-display text-5xl font-bold text-[#5A5A40] tracking-tight">00:00</h1>
+
+      <!-- Waveform Simulation -->
+      <div class="flex items-end gap-1 h-8 mt-2">
+        <div class="waveform-bar w-1.5 bg-[#8A8471] rounded-full" style="animation-delay: 0.1s"></div>
+        <div class="waveform-bar w-1.5 bg-[#5A5A40] rounded-full" style="animation-delay: 0.3s"></div>
+        <div class="waveform-bar w-1.5 bg-[#8A8471] rounded-full" style="animation-delay: 0.5s"></div>
+        <div class="waveform-bar w-1.5 bg-[#5A5A40] rounded-full" style="animation-delay: 0.2s"></div>
+        <div class="waveform-bar w-1.5 bg-[#A3B18A] rounded-full" style="animation-delay: 0.4s"></div>
+      </div>
+    </div>
+
+    <!-- Audio Playback (Temporary Memory Blob) -->
+    <!-- TARGET ELEMENT ID: audioPlayback -->
+    <audio id="audioPlayback" controls class="w-full mt-4 hidden rounded-lg border border-[#E6E2D3]"></audio>
+
+    <!-- Live Transcript & Manual Pasting Panel -->
+    <div class="w-full bg-[#FAF8F2] rounded-2xl p-6 shadow-sm border border-[#E6E2D3] my-6 flex flex-col gap-3">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
+          <h2 class="font-display text-lg font-semibold text-[#33322E] flex items-center gap-2">
+            <span class="material-symbols-outlined text-[#5A5A40]">notes</span>
+            <span>Live Session Transcript</span>
+          </h2>
+          <span id="speechStatusBadge" class="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 bg-[#E6EBDD] text-[#5A5A40] rounded-full border border-[#E6E2D3] flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
+            <span id="speechStatusText">Listening...</span>
+          </span>
+        </div>
+        <button id="loadSampleTranscriptBtn" type="button" class="text-xs text-[#5A5A40] hover:text-[#33322E] font-semibold underline flex items-center gap-1">
+          <span class="material-symbols-outlined text-sm">post_add</span>
+          <span>Load Sample Clinical Transcript</span>
+        </button>
+      </div>
+
+      <!-- TARGET ELEMENT ID: transcriptInput -->
+      <textarea id="transcriptInput" rows="6" class="w-full bg-white border border-[#E6E2D3] rounded-xl p-4 text-sm text-[#33322E] focus:ring-1 focus:ring-[#5A5A40] focus:border-[#5A5A40] focus:outline-none custom-scrollbar leading-relaxed" placeholder="Start speaking or type/paste session notes here... Speech recognition will transcribe live as you speak."></textarea>
+    </div>
+
+    <!-- Fixed Floating Controls -->
+    <div class="fixed bottom-10 left-0 right-0 flex justify-center gap-4 px-6 z-40">
+      <!-- TARGET ELEMENT ID: startRecordingBtn -->
+      <button id="startRecordingBtn" class="px-6 py-3 bg-[#8A8471] text-white rounded-lg font-semibold text-sm shadow-md hover:opacity-90 transition-all flex items-center gap-2" hidden>
+        <span class="material-symbols-outlined">mic</span>
+        <span>Start Rec</span>
+      </button>
+
+      <!-- TARGET ELEMENT ID: stopRecordingBtn -->
+      <button id="stopRecordingBtn" class="px-8 py-3.5 bg-[#5A5A40] text-white rounded-lg font-display font-bold text-base shadow-lg hover:bg-[#4a4a35] transition-all flex items-center gap-3">
+        <span class="material-symbols-outlined">stop_circle</span>
+        <span>Stop and Review Transcript</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- SCREEN 4: FORMAT SELECTION -->
+  <div id="format-screen" class="flex-grow flex flex-col items-center justify-center px-6 py-10 max-w-xl mx-auto w-full hidden">
+    <div class="text-center mb-8 space-y-2">
+      <h1 class="font-display text-3xl font-bold text-[#33322E]">Select Note Format</h1>
+      <p class="text-sm text-[#8A8471]">Choose the clinical documentation structure for this session.</p>
+    </div>
+
+    <!-- TARGET ELEMENT ID / Container: noteFormat -->
+    <div id="noteFormat" class="w-full space-y-4">
+      <div class="selection-card p-5 rounded-2xl bg-[#FAF8F2] cursor-pointer flex items-center gap-4 border border-[#E6E2D3] transition-all active-selection" data-format="DAP">
+        <div class="w-12 h-12 rounded-lg bg-[#E6EBDD] flex items-center justify-center text-[#5A5A40]">
+          <span class="material-symbols-outlined">description</span>
+        </div>
+        <div class="flex-grow">
+          <div class="flex justify-between items-center">
+            <span class="font-display font-semibold text-lg text-[#33322E]">DAP Format</span>
+            <span class="material-symbols-outlined text-[#5A5A40]">check_circle</span>
+          </div>
+          <p class="text-xs text-[#8A8471] mt-1">Data, Assessment, and Plan standard for behavioral health.</p>
+        </div>
+      </div>
+
+      <div class="selection-card p-5 rounded-2xl bg-[#FAF8F2] cursor-pointer flex items-center gap-4 border border-[#E6E2D3] transition-all" data-format="SOAP">
+        <div class="w-12 h-12 rounded-lg bg-[#F3F0E6] flex items-center justify-center text-[#8A8471]">
+          <span class="material-symbols-outlined">medical_information</span>
+        </div>
+        <div class="flex-grow">
+          <div class="flex justify-between items-center">
+            <span class="font-display font-semibold text-lg text-[#33322E]">SOAP Format</span>
+            <span class="material-symbols-outlined text-[#8A8471]">check_circle</span>
+          </div>
+          <p class="text-xs text-[#8A8471] mt-1">Subjective, Objective, Assessment, and Plan medical format.</p>
+        </div>
+      </div>
+
+      <div class="selection-card p-5 rounded-2xl bg-[#FAF8F2] cursor-pointer flex items-center gap-4 border border-[#E6E2D3] transition-all" data-format="BOTH">
+        <div class="w-12 h-12 rounded-lg bg-[#E6EBDD] flex items-center justify-center text-[#5A5A40]">
+          <span class="material-symbols-outlined">dynamic_feed</span>
+        </div>
+        <div class="flex-grow">
+          <div class="flex justify-between items-center">
+            <span class="font-display font-semibold text-lg text-[#33322E]">Both (DAP + SOAP)</span>
+            <span class="material-symbols-outlined text-[#8A8471]">check_circle</span>
+          </div>
+          <p class="text-xs text-[#8A8471] mt-1">Generate comprehensive versions for clinical and insurance records.</p>
+        </div>
+      </div>
+    </div>
+
+    <button id="generateNoteBtn" class="w-full mt-8 bg-[#5A5A40] text-white font-display text-base font-bold py-3.5 rounded-lg shadow-sm hover:bg-[#4a4a35] transition-all flex items-center justify-center gap-2">
+      <span>Continue to Purpose Selection</span>
+      <span class="material-symbols-outlined text-base">arrow_forward</span>
+    </button>
+  </div>
+
+  <!-- SCREEN 5: PROCESSING ANIMATION -->
+  <div id="processing-screen" class="fixed inset-0 bg-[#FDFBF7]/95 backdrop-blur-md flex flex-col items-center justify-center p-6 z-50 hidden">
+    <div class="flex flex-col items-center max-w-md text-center space-y-6">
+      <div class="w-20 h-20 rounded-full bg-[#E6EBDD] flex items-center justify-center animate-spin border border-[#E6E2D3]">
+        <span class="material-symbols-outlined text-4xl text-[#5A5A40]">auto_awesome</span>
+      </div>
+      <div class="space-y-2">
+        <h2 class="font-display text-2xl font-bold text-[#5A5A40]">Distilling clinical note...</h2>
+        <p class="text-sm text-[#8A8471]">Generating DAP/SOAP structure using local Ollama Gemma 4 engine...</p>
+      </div>
+      <div class="px-4 py-2 bg-[#FAF8F2] rounded-full border border-[#E6E2D3] flex items-center gap-2 text-xs text-[#8A8471]">
+        <span class="material-symbols-outlined text-[#5A5A40] text-sm">lock</span>
+        <span>Strict Fact Enforcement • Zero Hallucination Mode</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCREEN 6: PURPOSE SELECTION -->
+  <div id="purpose-screen" class="flex-grow flex flex-col items-center justify-center px-6 py-10 max-w-xl mx-auto w-full hidden">
+    <div class="text-center mb-8 space-y-2">
+      <h1 class="font-display text-3xl font-bold text-[#33322E]">Select Documentation Purpose</h1>
+      <p class="text-sm text-[#8A8471]">Readiness checks and checklist items will adapt based on this target.</p>
+    </div>
+
+    <form id="purpose-form" class="w-full space-y-4">
+      <label class="block p-5 rounded-2xl bg-[#FAF8F2] border border-[#E6E2D3] cursor-pointer hover:bg-[#F3F0E6] transition-all">
+        <div class="flex items-center gap-4">
+          <input type="radio" name="purpose" value="progress" checked class="h-5 w-5 text-[#5A5A40] focus:ring-[#5A5A40]" />
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="material-symbols-outlined text-lg text-[#5A5A40]">monitoring</span>
+              <h3 class="font-display font-semibold text-lg text-[#5A5A40]">Progress Tracking</h3>
+            </div>
+            <p class="text-xs text-[#8A8471] mt-1 leading-relaxed">Focus on clinical outcomes, symptom changes, patient progress, and DAP/SOAP session documentation.</p>
+          </div>
+        </div>
+      </label>
+
+      <label class="block p-5 rounded-2xl bg-[#FAF8F2] border border-[#E6E2D3] cursor-pointer hover:bg-[#F3F0E6] transition-all">
+        <div class="flex items-center gap-4">
+          <input type="radio" name="purpose" value="billing_insurance" class="h-5 w-5 text-[#5A5A40] focus:ring-[#5A5A40]" />
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="material-symbols-outlined text-lg text-[#5A5A40]">verified_user</span>
+              <h3 class="font-display font-semibold text-lg text-[#5A5A40]">Billing & Insurance Readiness Report</h3>
+            </div>
+            <p class="text-xs text-[#8A8471] mt-1 leading-relaxed">Complete audit report with CPT code recommendation, session duration verification, medical necessity linkage, and claim compliance flags.</p>
+          </div>
+        </div>
+      </label>
+
+      <button type="submit" id="submitPurposeBtn" class="w-full mt-6 bg-[#5A5A40] text-white font-display text-base font-bold py-3.5 rounded-lg shadow-sm hover:bg-[#4a4a35] transition-all flex items-center justify-center gap-2">
+        <span>Generate & Review Draft</span>
+        <span class="material-symbols-outlined text-base">auto_awesome</span>
+      </button>
+    </form>
+  </div>
+
+  <!-- SCREEN 7: CLINICAL NOTE REVIEW COCKPIT -->
+  <div id="review-screen" class="flex-grow max-w-6xl mx-auto w-full px-6 py-8 hidden">
+    <!-- Header Controls -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 mb-8 border-b border-[#E6E2D3]">
+      <div>
+        <div class="flex items-center gap-2 text-xs font-bold text-[#8A8471] uppercase tracking-wider mb-1">
+          <span class="material-symbols-outlined text-sm text-[#5A5A40]">fact_check</span>
+          <span>Draft Review Cockpit</span>
+        </div>
+        <h1 class="font-display text-3xl font-bold text-[#33322E]">Client Session Note Draft</h1>
+      </div>
+      <div class="flex items-center gap-3">
+        <!-- TARGET ELEMENT ID: approveDeleteBtn -->
+        <button id="approveDeleteBtn" class="px-6 py-3 bg-[#5A5A40] text-white rounded-lg font-bold text-xs uppercase tracking-wider shadow-sm hover:bg-[#4a4a35] transition-all flex items-center gap-2">
+          <span class="material-symbols-outlined text-sm">done_all</span>
+          <span>APPROVE & WIPE RAW DATA</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Review Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <!-- Left Column: Editable Note Body -->
+      <div class="lg:col-span-8 space-y-6">
+        <div class="bg-[#FAF8F2] rounded-2xl p-6 shadow-sm border border-[#E6E2D3]">
+          <div class="flex justify-between items-center mb-4 pb-3 border-b border-[#E6E2D3]">
+            <h2 class="font-display text-lg font-semibold text-[#33322E] flex items-center gap-2">
+              <span class="material-symbols-outlined text-[#5A5A40]">edit_note</span>
+              <span>Clinical Progress Note</span>
+            </h2>
+            <span class="text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 bg-[#E6EBDD] text-[#5A5A40] rounded-md border border-[#E6E2D3]">Editable</span>
+          </div>
+
+          <!-- TARGET ELEMENT ID: noteBody -->
+          <div id="noteBody" class="space-y-4">
+            <!-- Dynamically populated by app.js -->
+          </div>
+        </div>
+
+        <!-- Evidence Timestamps Box -->
+        <div class="bg-[#FAF8F2] rounded-2xl p-6 shadow-sm border border-[#E6E2D3] space-y-3">
+          <h3 class="font-display font-semibold text-xs text-[#8A8471] uppercase tracking-wider flex items-center gap-2">
+            <span class="material-symbols-outlined text-[#5A5A40] text-base">format_quote</span>
+            <span>Timestamped Session Evidence</span>
+          </h3>
+          <!-- TARGET ELEMENT ID: evidenceChips -->
+          <div id="evidenceChips" class="flex flex-wrap gap-2">
+            <!-- Dynamically populated by app.js -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Readiness & Missing Fields Checklist -->
+      <div class="lg:col-span-4 space-y-6">
+        <div class="bg-[#FAF8F2] rounded-2xl p-6 shadow-sm border border-[#E6E2D3] space-y-5">
+          <h2 class="font-display text-lg font-semibold text-[#33322E] flex items-center gap-2">
+            <span class="material-symbols-outlined text-[#5A5A40]">verified</span>
+            <span>Readiness Report</span>
+          </h2>
+
+          <!-- TARGET ELEMENT ID: readinessLabel -->
+          <div class="inline-block">
+            <span id="readinessLabel" class="px-3 py-1 bg-[#E6EBDD] text-[#5A5A40] rounded-lg text-xs font-bold border border-[#E6E2D3]">
+              Ready for therapist review
+            </span>
+          </div>
+
+          <!-- TARGET ELEMENT ID: missingFields -->
+          <div id="missingFields" class="space-y-2 pt-2 border-t border-[#E6E2D3]">
+            <!-- Dynamically populated by app.js -->
+          </div>
+
+          <div class="p-4 bg-[#F3F0E6] rounded-xl border border-[#E6E2D3] text-xs text-[#8A8471] leading-relaxed">
+            <strong class="text-[#5A5A40] font-semibold block mb-1">Privacy Guarantee</strong>
+            Approving this note permanently erases raw audio buffers and transcripts from temporary server memory.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCREEN 8: CONFIDENTIALITY MAINTAINED / SUCCESS -->
+  <div id="success-screen" class="fixed inset-0 bg-[#FDFBF7] flex flex-col items-center justify-center p-6 z-50 hidden">
+    <div class="max-w-md w-full text-center space-y-6 bg-[#FAF8F2] p-8 rounded-3xl shadow-xl border border-[#E6E2D3]">
+      <div class="w-20 h-20 rounded-full bg-[#E6EBDD] text-[#5A5A40] flex items-center justify-center mx-auto border border-[#E6E2D3]">
+        <span class="material-symbols-outlined text-5xl">check_circle</span>
+      </div>
+
+      <div class="space-y-2">
+        <h1 class="font-display text-2xl font-bold text-[#33322E]">Confidentiality Maintained</h1>
+        <p class="text-sm text-[#8A8471]">Raw transcript deleted. Only the final approved clinical note remains in state.</p>
+      </div>
+
+      <div class="p-4 bg-[#F3F0E6] rounded-xl text-xs text-left space-y-2 border border-[#E6E2D3]">
+        <div class="flex items-center gap-2 text-[#5A5A40] font-semibold">
+          <span class="material-symbols-outlined text-base">verified_user</span>
+          <span>Privacy Action Completed</span>
+        </div>
+        <p class="text-[#8A8471]">Audio buffer and session transcript purged from memory.</p>
+      </div>
+
+      <button class="w-full py-3.5 bg-[#5A5A40] text-white rounded-lg font-bold text-xs uppercase tracking-wider shadow-sm hover:bg-[#4a4a35] transition-all" onclick="window.HushNoteApp?.resetSessionState()">
+        Start New Session
+      </button>
+    </div>
+  </div>
+
+  <!-- Bottom Privacy Notification Strip -->
+  <div class="bg-[#33322E] text-white text-[10px] py-2 text-center uppercase tracking-[0.2em] font-medium border-t border-[#E6E2D3]">
+    Privacy Mode Active: Raw audio & transcript never leave this device. Encrypted at rest.
+  </div>
+
+  <!-- Modular Application Logic Script -->
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
