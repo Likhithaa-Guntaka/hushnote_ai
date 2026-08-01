@@ -86,6 +86,11 @@
         <h1 class="font-display text-display-xl font-bold tracking-tight text-ink sm:text-[clamp(3.5rem,7vw,5rem)] sm:leading-[1.05]">
           HushNote
         </h1>
+        <!-- Category descriptor. Slate is the system's recessive, informational
+             tone — it names what this is without competing with the tagline. -->
+        <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate">
+          Sovereign AI Clinical Assistant
+        </p>
         <p class="font-display text-display-md font-medium italic leading-tight text-accent">
           Record. Review. Keep only the note.
         </p>
@@ -95,18 +100,33 @@
     <!-- Sound orb: a real <button>, keyboard reachable. -->
     <button id="startSessionBtn" type="button"
       class="group relative grid size-64 shrink-0 place-items-center rounded-full transition-transform duration-500 ease-cinematic hover:scale-[1.02] active:scale-[0.985] sm:size-80">
-      <!-- Outer glow. Stronger in dark, where low-opacity light gets swallowed. -->
+      <!-- Resting spill from the filament. Breathes on its own. -->
       <span aria-hidden="true"
-        class="absolute inset-0 animate-breathe rounded-full bg-[radial-gradient(circle_at_50%_45%,color-mix(in_oklab,var(--color-brand)_18%,transparent),transparent_70%)] dark:bg-[radial-gradient(circle_at_50%_45%,color-mix(in_oklab,var(--color-brand)_30%,transparent),transparent_70%)]"></span>
+        class="absolute inset-0 animate-breathe rounded-full bg-[radial-gradient(circle_at_50%_45%,color-mix(in_oklab,var(--color-brand)_22%,transparent),transparent_68%)] dark:bg-[radial-gradient(circle_at_50%_45%,color-mix(in_oklab,var(--color-brand)_36%,transparent),transparent_68%)]"></span>
+      <!--
+        Second halo, hover only. It exists because `animate-breathe` already
+        owns opacity on the layer above — an animation beats a transition on the
+        same property, so the swell needs its own element to fade in on.
+      -->
+      <span aria-hidden="true"
+        class="absolute -inset-6 rounded-full opacity-0 transition-opacity duration-700 ease-cinematic group-hover:opacity-100 bg-[radial-gradient(circle_at_50%_48%,color-mix(in_oklab,var(--color-brand)_26%,transparent),transparent_66%)] dark:bg-[radial-gradient(circle_at_50%_48%,color-mix(in_oklab,var(--color-brand)_42%,transparent),transparent_66%)]"></span>
       <!-- Slow conic drift — motion that doesn't read as a loading spinner. -->
       <span aria-hidden="true"
-        class="absolute inset-4 animate-drift rounded-full bg-[conic-gradient(from_0deg,transparent,var(--color-brand),transparent_60%)] opacity-[0.08]"></span>
+        class="absolute inset-4 animate-drift rounded-full bg-[conic-gradient(from_0deg,transparent,var(--color-brand),transparent_60%)] opacity-[0.09]"></span>
       <span aria-hidden="true"
-        class="absolute inset-3 rounded-full border border-line bg-gradient-to-tr from-surface via-accent-soft/60 to-card shadow-e2 dark:from-surface dark:via-accent-soft dark:to-raised"></span>
+        class="absolute inset-3 rounded-full border border-line bg-linear-to-tr from-surface via-accent-soft/60 to-card shadow-e2 dark:from-surface dark:via-accent-soft dark:to-raised"></span>
 
-      <span class="relative flex items-center gap-2 rounded-full bg-brand px-8 py-4 font-display text-body font-bold text-on-brand shadow-e2 transition-colors duration-300 group-hover:bg-brand-hover">
-        <svg class="icon size-5" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19v3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><rect x="9" y="2" width="6" height="13" rx="3"/></svg>
-        <span>Start Session</span>
+      <!--
+        The bulb. A vertical sage gradient gives it a lit top and a shaded
+        underside, and the two sage-tinted shadows are the glow it casts —
+        both widen and warm on hover, so it reads as a lamp turned up rather
+        than a button merely highlighted.
+      -->
+      <span class="relative flex items-center gap-2.5 overflow-hidden rounded-full bg-linear-to-b from-brand to-brand-hover px-8 py-4 font-display text-xl font-bold text-on-brand shadow-[0_10px_26px_-10px_color-mix(in_oklab,var(--color-brand)_70%,transparent),0_0_22px_-4px_color-mix(in_oklab,var(--color-brand)_45%,transparent)] transition-[box-shadow,filter] duration-500 ease-cinematic group-hover:brightness-110 group-hover:shadow-[0_14px_34px_-10px_color-mix(in_oklab,var(--color-brand)_80%,transparent),0_0_58px_2px_color-mix(in_oklab,var(--color-brand)_65%,transparent)]">
+        <!-- Specular sheen across the crown, so the fill reads as lit glass. -->
+        <span aria-hidden="true" class="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_-15%,rgb(255_255_255/0.4),transparent_60%)]"></span>
+        <svg class="icon relative size-6" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19v3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><rect x="9" y="2" width="6" height="13" rx="3"/></svg>
+        <span class="relative">Start Session</span>
       </span>
     </button>
   </main>
