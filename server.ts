@@ -2,24 +2,8 @@ import express, { Request, Response } from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
-import { GoogleGenAI } from '@google/genai';
 
 dotenv.config();
-
-let aiClient: GoogleGenAI | null = null;
-function getGeminiClient(): GoogleGenAI | null {
-  if (!aiClient && process.env.GEMINI_API_KEY) {
-    aiClient = new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build'
-        }
-      }
-    });
-  }
-  return aiClient;
-}
 
 const currentFilename = typeof __filename !== 'undefined' 
   ? __filename 
@@ -277,33 +261,9 @@ Return a JSON object with this EXACT structure:
 }`;
 
     let resultJson: any = null;
-    let aiSource = 'local_gemma_engine';
+    let aiSource = 'ollama_gemma';
 
-    // 1. Try Gemini API if GEMINI_API_KEY is configured
-    const gemini = getGeminiClient();
-    if (gemini) {
-      try {
-        const response = await gemini.models.generateContent({
-          model: 'gemini-3.6-flash',
-          contents: `${systemPrompt}\n\n${userPrompt}`,
-          config: {
-            responseMimeType: 'application/json'
-          }
-        });
-
-        if (response.text) {
-          const parsed = JSON.parse(response.text);
-          if (parsed && parsed.note) {
-            resultJson = parsed;
-            aiSource = 'gemini_3_6_flash';
-          }
-        }
-      } catch (geminiErr: any) {
-        // Silently fall back if Gemini call is not configured or fails
-      }
-    }
-
-    // 2. Try Ollama (default to http://127.0.0.1:11434 if running locally offline)
+    // Local-only Ollama generation (gemma4 by default)
     const ollamaBaseUrl = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
     if (!resultJson && ollamaBaseUrl) {
       const modelName = model || process.env.OLLAMA_MODEL || 'gemma4';
