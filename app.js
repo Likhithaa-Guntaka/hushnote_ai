@@ -53,7 +53,12 @@ let elements = {};
 document.addEventListener('DOMContentLoaded', () => {
   console.log('[HushNote Client] Initializing state wiring...');
   cacheDOMElements();
+  initTheme();
+  buildWaveform();
   bindEventListeners();
+  paintRadioCards('note-format');
+  paintRadioCards('purpose');
+  applyConsentState();
   checkBackendHealth();
   updateTimerDisplay();
   showScreen('home-screen');
@@ -125,10 +130,7 @@ function bindEventListeners() {
   if (elements.consentCheckbox) {
     elements.consentCheckbox.addEventListener('change', (e) => {
       state.consentGiven = e.target.checked;
-      if (elements.confirmConsentBtn) {
-        elements.confirmConsentBtn.disabled = !state.consentGiven;
-        elements.confirmConsentBtn.classList.toggle('opacity-40', !state.consentGiven);
-      }
+      applyConsentState();
     });
   }
 
@@ -196,14 +198,20 @@ function bindEventListeners() {
     });
   }
 
-  // 5. Format Selection Cards
-  const formatCards = document.querySelectorAll('.selection-card[data-format]');
-  formatCards.forEach(card => {
-    card.addEventListener('click', () => {
-      formatCards.forEach(c => c.classList.remove('active-selection', 'border-primary'));
-      card.classList.add('active-selection', 'border-primary');
-      state.selectedFormat = card.getAttribute('data-format') || 'DAP';
+  // 5. Format Selection Cards. The radio itself is the source of truth — the
+  // card only paints the selected state, so keyboard selection stays in sync.
+  document.querySelectorAll('input[name="note-format"]').forEach(input => {
+    input.addEventListener('change', () => {
+      state.selectedFormat = input.value || 'DAP';
+      paintRadioCards('note-format');
       console.log('[HushNote] Selected format:', state.selectedFormat);
+    });
+  });
+
+  document.querySelectorAll('input[name="purpose"]').forEach(input => {
+    input.addEventListener('change', () => {
+      state.selectedPurpose = input.value;
+      paintRadioCards('purpose');
     });
   });
 
@@ -233,9 +241,227 @@ function bindEventListeners() {
   }
 
   // 8. New Session Buttons
-  document.querySelectorAll('[data-action="new-session"]').forEach(btn => {
+  document.querySelectorAll('[data-action="new-session"], #startNewSessionBtn').forEach(btn => {
     btn.addEventListener('click', resetSessionState);
   });
+
+  // 9. Header lockup returns home. Mid-session it discards, so it confirms.
+  const homeLockup = document.getElementById('homeLockup');
+  if (homeLockup) {
+    homeLockup.addEventListener('click', () => {
+      const midSession = state.currentScreen !== 'home-screen';
+      if (midSession && !window.confirm('Discard this session and return to the start?')) return;
+      resetSessionState();
+    });
+  }
+
+  // 10. Per-screen back links. `data-confirm` guards the destructive ones.
+  document.querySelectorAll('[data-back]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const confirmText = btn.getAttribute('data-confirm');
+      if (confirmText && !window.confirm(confirmText)) return;
+      const target = btn.getAttribute('data-back');
+      if (target === 'home-screen') resetSessionState();
+      else showScreen(target);
+    });
+  });
+
+  // 11. Theme toggle
+  const themeToggle = document.getElementById('themeToggle');
+  if (themeToggle) {
+    themeToggle.addEventListener('click', () => {
+      applyTheme(document.documentElement.classList.contains('dark') ? 'light' : 'dark');
+    });
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Theme
+ * ------------------------------------------------------------------ */
+
+const THEME_STORAGE_KEY = 'hushnote:theme';
+
+/**
+ * Two-state light/dark, defaulting to light. The inline boot script in
+ * index.html applies the stored value before first paint; this only keeps the
+ * toggle's icon and labels in sync afterwards.
+ */
+function applyTheme(theme) {
+  const isDark = theme === 'dark';
+  const root = document.documentElement;
+
+  root.classList.toggle('dark', isDark);
+  root.style.colorScheme = theme;
+
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+  } catch (e) {
+    // Private browsing / storage disabled — the in-memory theme still works.
+  }
+
+  const label = isDark ? 'Switch to light theme' : 'Switch to dark theme';
+  const toggle = document.getElementById('themeToggle');
+  const sun = document.getElementById('themeIconSun');
+  const moon = document.getElementById('themeIconMoon');
+  const srLabel = document.getElementById('themeToggleLabel');
+
+  if (toggle) {
+    toggle.setAttribute('aria-pressed', String(isDark));
+    toggle.setAttribute('title', label);
+  }
+  if (sun) sun.hidden = isDark;
+  if (moon) moon.hidden = !isDark;
+  if (srLabel) srLabel.textContent = label;
+}
+
+function initTheme() {
+  let stored = 'light';
+  try {
+    stored = localStorage.getItem(THEME_STORAGE_KEY) === 'dark' ? 'dark' : 'light';
+  } catch (e) {
+    // Fall through to light.
+  }
+  applyTheme(stored);
+}
+
+/* ------------------------------------------------------------------ *
+ * Selection painting
+ * ------------------------------------------------------------------ */
+
+const RADIO_CARD_ON = ['border-brand', 'bg-accent-soft', 'ring-2', 'ring-brand/25'];
+const RADIO_CARD_OFF = ['border-line', 'bg-card', 'hover:border-line-strong', 'hover:shadow-e2'];
+const RADIO_ICON_ON = ['bg-brand', 'text-on-brand'];
+const RADIO_ICON_OFF = ['bg-surface', 'text-ink-muted'];
+
+/**
+ * Paints every card in a radio group from its input's checked state. The check
+ * glyph is hidden rather than absent so the row height never shifts.
+ */
+function paintRadioCards(groupName) {
+  document.querySelectorAll(`input[name="${groupName}"]`).forEach(input => {
+    const card = input.closest('.radio-card');
+    if (!card) return;
+
+    const on = input.checked;
+    card.classList.remove(...(on ? RADIO_CARD_OFF : RADIO_CARD_ON));
+    card.classList.add(...(on ? RADIO_CARD_ON : RADIO_CARD_OFF));
+
+    const icon = card.querySelector('.radio-icon');
+    if (icon) {
+      icon.classList.remove(...(on ? RADIO_ICON_OFF : RADIO_ICON_ON));
+      icon.classList.add(...(on ? RADIO_ICON_ON : RADIO_ICON_OFF));
+    }
+
+    const check = card.querySelector('.radio-check');
+    if (check) check.style.visibility = on ? 'visible' : 'hidden';
+  });
+}
+
+/** Consent card + custom checkbox mark + the gated primary button. */
+function applyConsentState() {
+  const on = state.consentGiven;
+
+  const card = document.getElementById('consentCard');
+  if (card) {
+    card.classList.toggle('border-brand', on);
+    card.classList.toggle('bg-accent-soft', on);
+    card.classList.toggle('shadow-e1', on);
+    card.classList.toggle('border-line-strong', !on);
+    card.classList.toggle('bg-surface', !on);
+    card.classList.toggle('hover:border-brand', !on);
+  }
+
+  const mark = document.getElementById('consentMark');
+  if (mark) {
+    mark.classList.toggle('border-brand', on);
+    mark.classList.toggle('bg-brand', on);
+    mark.classList.toggle('text-on-brand', on);
+    mark.classList.toggle('border-line-strong', !on);
+    mark.classList.toggle('bg-card', !on);
+    mark.classList.toggle('text-transparent', !on);
+  }
+
+  if (elements.confirmConsentBtn) elements.confirmConsentBtn.disabled = !on;
+}
+
+/* ------------------------------------------------------------------ *
+ * Waveform
+ * ------------------------------------------------------------------ */
+
+const WAVEFORM_BARS = 28;
+
+/** Edge bars sit back so the group reads as a single shape. */
+function barOpacity(index) {
+  const distance = Math.abs(index - (WAVEFORM_BARS - 1) / 2) / ((WAVEFORM_BARS - 1) / 2);
+  return 0.35 + (1 - distance) * 0.65;
+}
+
+/**
+ * Synthetic amplitude bars. Each bar gets its own duration and delay so the
+ * group doesn't read as one loop.
+ */
+function buildWaveform() {
+  const container = document.getElementById('waveform');
+  if (!container || container.childElementCount) return;
+
+  for (let i = 0; i < WAVEFORM_BARS; i += 1) {
+    const bar = document.createElement('span');
+    bar.className = 'waveform-bar w-[3px] rounded-full bg-brand';
+    bar.style.height = '100%';
+    bar.style.opacity = String(barOpacity(i));
+    bar.style.setProperty('--bar-duration', `${900 + (i % 5) * 120}ms`);
+    bar.style.setProperty('--bar-delay', `${i * 43}ms`);
+    container.appendChild(bar);
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Processing steps
+ * ------------------------------------------------------------------ */
+
+const PROCESSING_STEPS = [
+  'Reading the transcript',
+  'Drafting each section',
+  'Checking every claim against what was said',
+];
+
+let processingStepTimer = null;
+
+function renderProcessingSteps(activeIndex) {
+  const list = document.getElementById('processingSteps');
+  if (!list) return;
+
+  list.innerHTML = PROCESSING_STEPS.map((label, index) => {
+    const reached = index <= activeIndex;
+    const leading = index < activeIndex
+      ? '<svg class="icon size-[15px] shrink-0 text-accent" viewBox="0 0 24 24" aria-hidden="true" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>'
+      : `<span aria-hidden="true" class="size-2 shrink-0 rounded-full ${index === activeIndex ? 'animate-pulse bg-brand' : 'bg-line-strong'}"></span>`;
+
+    return `
+      <li class="flex items-center gap-3 rounded-panel border border-line px-4 py-3 text-body-sm transition-colors duration-500 ${
+        reached ? 'bg-accent-soft text-accent-ink' : 'bg-surface text-ink-subtle'
+      }">
+        ${leading}
+        <span>${label}</span>
+      </li>`;
+  }).join('');
+}
+
+function startProcessingSteps() {
+  let step = 0;
+  renderProcessingSteps(step);
+  stopProcessingSteps();
+  processingStepTimer = window.setInterval(() => {
+    step = Math.min(step + 1, PROCESSING_STEPS.length - 1);
+    renderProcessingSteps(step);
+  }, 1800);
+}
+
+function stopProcessingSteps() {
+  if (processingStepTimer) {
+    window.clearInterval(processingStepTimer);
+    processingStepTimer = null;
+  }
 }
 
 /**
@@ -251,24 +477,29 @@ function showScreen(screenId) {
     'success-screen'
   ];
 
+  /*
+   * Visibility is the `hidden` attribute alone. Each screen declares its own
+   * layout in markup (the overlays are flex-centred, the pages are flex-col),
+   * so the navigator must not impose a display mode of its own — doing that is
+   * what previously laid the review header out as a row.
+   */
   allScreenIds.forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
-
-    if (id === screenId || (screenId === 'home-screen' && id === 'landing-screen')) {
-      el.classList.remove('hidden', 'translate-y-full', 'opacity-0');
-      el.classList.add('flex', 'opacity-100');
-      el.style.display = '';
-    } else if (id === 'consent-screen' && screenId !== 'consent-screen') {
-      el.classList.add('translate-y-full', 'opacity-0');
-      setTimeout(() => {
-        if (state.currentScreen !== 'consent-screen') el.style.display = 'none';
-      }, 500);
-    } else {
-      el.classList.add('hidden');
-      el.style.display = 'none';
-    }
+    el.hidden = !(id === screenId || (screenId === 'home-screen' && id === 'landing-screen'));
   });
+
+  // The processing overlay animates its checklist only while it is on screen.
+  if (screenId === 'processing-screen') startProcessingSteps();
+  else stopProcessingSteps();
+
+  // Move focus to the new screen so keyboard and screen-reader users land at
+  // its top rather than wherever the previous screen left them.
+  const target = document.getElementById(screenId);
+  if (target) {
+    const focusTarget = target.matches('[tabindex]') ? target : target.querySelector('[tabindex="-1"]');
+    (focusTarget || target).focus?.({ preventScroll: true });
+  }
 
   window.scrollTo(0, 0);
 }
@@ -281,13 +512,22 @@ function updateSpeechStatus(text, type = 'active') {
     elements.speechStatusText.textContent = text;
   }
   if (elements.speechStatusBadge) {
-    if (type === 'active') {
-      elements.speechStatusBadge.className = 'text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 bg-[#E6EBDD] text-[#5A5A40] rounded-full border border-[#E6E2D3] flex items-center gap-1';
-    } else if (type === 'warning') {
-      elements.speechStatusBadge.className = 'text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 bg-amber-100 text-amber-800 rounded-full border border-amber-200 flex items-center gap-1';
-    } else {
-      elements.speechStatusBadge.className = 'text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 bg-[#F3F0E6] text-[#8A8471] rounded-full border border-[#E6E2D3] flex items-center gap-1';
-    }
+    const TONE = {
+      active: { badge: 'bg-ok-soft text-ok', dot: 'bg-ok', pulse: true },
+      warning: { badge: 'bg-warn-soft text-warn', dot: 'bg-warn', pulse: false },
+      idle: { badge: 'bg-surface text-ink-muted', dot: 'bg-ink-subtle', pulse: false },
+    };
+    const tone = TONE[type] || TONE.idle;
+
+    elements.speechStatusBadge.className =
+      `inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1 text-overline uppercase ${tone.badge}`;
+
+    // Rebuild the dot alongside the label so the tone stays consistent.
+    elements.speechStatusBadge.innerHTML =
+      `<span aria-hidden="true" class="size-1.5 shrink-0 rounded-full ${tone.dot}${tone.pulse ? ' animate-pulse' : ''}"></span>` +
+      `<span id="speechStatusText"></span>`;
+    elements.speechStatusText = document.getElementById('speechStatusText');
+    if (elements.speechStatusText) elements.speechStatusText.textContent = text;
   }
 }
 
@@ -403,7 +643,7 @@ async function startAudioRecording() {
         state.audioUrl = URL.createObjectURL(audioBlob);
         if (elements.audioPlayback) {
           elements.audioPlayback.src = state.audioUrl;
-          elements.audioPlayback.classList.remove('hidden');
+          elements.audioPlayback.hidden = false;
         }
         console.log('[HushNote Audio] Temporary audio snippet created in memory.');
       };
@@ -523,188 +763,198 @@ async function executeNoteGeneration() {
   }
 }
 
+/* Inline SVG glyphs reused across the generated review markup. */
+const ICON = {
+  clock: '<path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="10"/>',
+  banknote: '<rect width="20" height="12" x="2" y="6" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/>',
+  stethoscope: '<path d="M11 2v2"/><path d="M5 2v2"/><path d="M5 3H4a2 2 0 0 0-2 2v4a6 6 0 0 0 12 0V5a2 2 0 0 0-2-2h-1"/><path d="M8 15a6 6 0 0 0 12 0v-3"/><circle cx="20" cy="10" r="2"/>',
+  shield: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
+  squareCheck: '<path d="M21 10.656V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12.344"/><path d="m9 11 3 3L22 4"/>',
+  circleCheck: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+  triangleAlert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  chevronDown: '<path d="m6 9 6 6 6-6"/>',
+};
+
+/** `size` is a Tailwind size-* step; `tone` a text-* colour utility. */
+function icon(name, size = 4, tone = '') {
+  return `<svg class="icon size-${size} ${tone}" viewBox="0 0 24 24" aria-hidden="true">${ICON[name]}</svg>`;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/** One labelled, editable section of the note. */
+function noteField(label, lines) {
+  return `
+    <div class="space-y-1.5">
+      <label class="block text-overline uppercase text-accent">${label}</label>
+      <textarea rows="4"
+        class="custom-scrollbar w-full resize-y rounded-field border border-line bg-surface p-3.5 text-body-sm leading-relaxed text-ink transition-colors duration-200 focus:border-line-strong focus:outline-none">${escapeHtml(lines.join('\n'))}</textarea>
+    </div>`;
+}
+
+/**
+ * Collapsed-by-default detail. Native <details> so it works without JS and is
+ * announced correctly; the chevron is the only affordance it needs.
+ */
+function disclosure(summary, body) {
+  return `
+    <details class="group">
+      <summary class="flex cursor-pointer list-none items-center justify-between gap-2 rounded-control text-body-sm font-medium text-ink-muted transition-colors duration-200 hover:text-ink [&::-webkit-details-marker]:hidden">
+        <span>${summary}</span>
+        ${icon('chevronDown', 4, 'transition-transform duration-200 group-open:rotate-180')}
+      </summary>
+      ${body}
+    </details>`;
+}
+
 /**
  * Render Review Screen with editable note fields, readiness check, and evidence chips
  */
 function renderReviewScreen(data) {
   const { note = {}, evidence = [], missing_fields = [], readiness = {} } = data;
 
-  // 1. Render Note Fields
+  // 1. Note fields — SOAP carries an extra Objective section.
   if (elements.noteBody) {
-    let noteHtml = '';
+    const soap = state.selectedFormat === 'SOAP' || state.selectedFormat === 'BOTH';
 
-    if (state.selectedFormat === 'SOAP' || state.selectedFormat === 'BOTH') {
-      noteHtml += `
-        <div class="note-section border-b border-[#E6E2D3] pb-4 mb-4">
-          <label class="block font-bold text-[#5A5A40] mb-1.5 uppercase tracking-wider text-xs">Subjective</label>
-          <textarea class="w-full bg-white border border-[#E6E2D3] focus:ring-1 focus:ring-[#5A5A40] focus:border-[#5A5A40] rounded-xl p-3 text-sm text-[#33322E] leading-relaxed">${(note.subjective || note.data || []).join('\n')}</textarea>
-        </div>
-        <div class="note-section border-b border-[#E6E2D3] pb-4 mb-4">
-          <label class="block font-bold text-[#5A5A40] mb-1.5 uppercase tracking-wider text-xs">Objective</label>
-          <textarea class="w-full bg-white border border-[#E6E2D3] focus:ring-1 focus:ring-[#5A5A40] focus:border-[#5A5A40] rounded-xl p-3 text-sm text-[#33322E] leading-relaxed">${(note.objective || []).join('\n') || 'Client was attentive and responsive during discussion.'}</textarea>
-        </div>
-        <div class="note-section border-b border-[#E6E2D3] pb-4 mb-4">
-          <label class="block font-bold text-[#5A5A40] mb-1.5 uppercase tracking-wider text-xs">Assessment</label>
-          <textarea class="w-full bg-white border border-[#E6E2D3] focus:ring-1 focus:ring-[#5A5A40] focus:border-[#5A5A40] rounded-xl p-3 text-sm text-[#33322E] leading-relaxed">${(note.assessment || []).join('\n')}</textarea>
-        </div>
-        <div class="note-section pb-2">
-          <label class="block font-bold text-[#5A5A40] mb-1.5 uppercase tracking-wider text-xs">Plan</label>
-          <textarea class="w-full bg-white border border-[#E6E2D3] focus:ring-1 focus:ring-[#5A5A40] focus:border-[#5A5A40] rounded-xl p-3 text-sm text-[#33322E] leading-relaxed">${(note.plan || []).join('\n')}</textarea>
-        </div>
-      `;
-    } else {
-      // DAP Format
-      noteHtml += `
-        <div class="note-section border-b border-[#E6E2D3] pb-4 mb-4">
-          <label class="block font-bold text-[#5A5A40] mb-1.5 uppercase tracking-wider text-xs">Data</label>
-          <textarea class="w-full bg-white border border-[#E6E2D3] focus:ring-1 focus:ring-[#5A5A40] focus:border-[#5A5A40] rounded-xl p-3 text-sm text-[#33322E] leading-relaxed">${(note.data || note.subjective || []).join('\n')}</textarea>
-        </div>
-        <div class="note-section border-b border-[#E6E2D3] pb-4 mb-4">
-          <label class="block font-bold text-[#5A5A40] mb-1.5 uppercase tracking-wider text-xs">Assessment</label>
-          <textarea class="w-full bg-white border border-[#E6E2D3] focus:ring-1 focus:ring-[#5A5A40] focus:border-[#5A5A40] rounded-xl p-3 text-sm text-[#33322E] leading-relaxed">${(note.assessment || []).join('\n')}</textarea>
-        </div>
-        <div class="note-section pb-2">
-          <label class="block font-bold text-[#5A5A40] mb-1.5 uppercase tracking-wider text-xs">Plan</label>
-          <textarea class="w-full bg-white border border-[#E6E2D3] focus:ring-1 focus:ring-[#5A5A40] focus:border-[#5A5A40] rounded-xl p-3 text-sm text-[#33322E] leading-relaxed">${(note.plan || []).join('\n')}</textarea>
-        </div>
-      `;
-    }
-
-    elements.noteBody.innerHTML = noteHtml;
+    elements.noteBody.innerHTML = soap
+      ? [
+          noteField('Subjective', note.subjective || note.data || []),
+          noteField('Objective', note.objective && note.objective.length
+            ? note.objective
+            : ['Client was attentive and responsive during discussion.']),
+          noteField('Assessment', note.assessment || []),
+          noteField('Plan', note.plan || []),
+        ].join('')
+      : [
+          noteField('Data', note.data || note.subjective || []),
+          noteField('Assessment', note.assessment || []),
+          noteField('Plan', note.plan || []),
+        ].join('');
   }
 
-  // 2. Render Readiness Badge
+  // 2. Readiness badge
   if (elements.readinessLabel) {
     elements.readinessLabel.textContent = readiness.label || 'Ready for therapist review';
-    elements.readinessLabel.className = readiness.completed 
-      ? 'px-3 py-1 bg-[#E6EBDD] text-[#5A5A40] rounded-full text-xs font-bold border border-[#E6E2D3]'
-      : 'px-3 py-1 bg-[#F3F0E6] text-[#8A8471] rounded-full text-xs font-bold border border-[#E6E2D3]';
+    elements.readinessLabel.className = readiness.completed
+      ? 'inline-flex items-center rounded-full border border-line bg-accent-soft px-3 py-1 text-overline uppercase text-accent-ink'
+      : 'inline-flex items-center rounded-full border border-line bg-warn-soft px-3 py-1 text-overline uppercase text-warn';
   }
 
-  // 3. Render Timestamp Evidence Chips
+  // 3. Timestamped evidence chips
   if (elements.evidenceChips) {
-    if (evidence.length === 0) {
-      elements.evidenceChips.innerHTML = `<span class="text-xs text-[#8A8471] italic">No explicit timestamp quotes referenced.</span>`;
-    } else {
-      elements.evidenceChips.innerHTML = evidence.map(ev => `
-        <div class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-full text-xs text-[#33322E] font-medium border border-[#E6E2D3]">
-          <span class="material-symbols-outlined text-sm text-[#5A5A40]">schedule</span>
-          <span class="font-bold text-[#5A5A40]">${ev.timestamp || '00:15'}</span>
-          <span class="truncate max-w-[220px]" title="${ev.quote}">"${ev.quote}"</span>
-        </div>
-      `).join('');
-    }
+    elements.evidenceChips.innerHTML = evidence.length === 0
+      ? '<p class="font-display text-body-sm italic text-ink-subtle">No explicit timestamp quotes referenced.</p>'
+      : evidence.map(ev => `
+          <span class="inline-flex max-w-full items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1.5 text-body-sm text-ink">
+            ${icon('clock', 4, 'text-accent')}
+            <span class="font-semibold tabular-nums text-accent">${escapeHtml(ev.timestamp || '00:15')}</span>
+            <span class="truncate" title="${escapeHtml(ev.quote)}">&ldquo;${escapeHtml(ev.quote)}&rdquo;</span>
+          </span>`).join('');
   }
 
-  // 4. Render Missing Fields Checklist & Readiness Report Elements
+  /*
+   * 4. Readiness detail.
+   *
+   * One flat column rather than a stack of bordered boxes. What the clinician
+   * has to act on is the only thing open by default; the audit trail is real
+   * and stays available, but it sits behind a disclosure so the panel reads as
+   * a verdict instead of a report.
+   */
   if (elements.missingFields) {
     const fields = missing_fields.length > 0 ? missing_fields : (readiness.missing || []);
-    let fieldsHtml = '';
+    const checks = readiness.checksPassed || [];
+    const flags = readiness.auditFlags || [];
+    const blocks = [];
 
-    // CPT Code Recommendation
+    // a) Outstanding items — the actionable half, always visible.
+    blocks.push(fields.length > 0
+      ? `
+        <div class="space-y-2">
+          <p class="text-overline uppercase text-warn">Needs attention</p>
+          <ul class="space-y-2">
+            ${fields.map(field => `
+              <li class="flex items-start gap-2.5 text-body-sm leading-snug text-ink">
+                <span aria-hidden="true" class="mt-[0.4rem] size-1.5 shrink-0 rounded-full bg-warn"></span>
+                <span>${escapeHtml(field)}</span>
+              </li>`).join('')}
+          </ul>
+        </div>`
+      : `
+        <p class="flex items-center gap-2 text-body-sm text-ok">
+          ${icon('circleCheck', 4)}
+          <span>Nothing outstanding</span>
+        </p>`);
+
+    // b) The facts, as label/value rows. No nested cards, no icons per row.
+    const facts = [];
     if (readiness.suggestedCpt) {
-      fieldsHtml += `
-        <div class="p-3.5 bg-[#E6EBDD] rounded-xl border border-[#E6E2D3] mb-3 text-xs text-[#33322E]">
-          <div class="flex items-center justify-between font-bold text-[#5A5A40] mb-1">
-            <span class="flex items-center gap-1.5">
-              <span class="material-symbols-outlined text-base">payments</span>
-              <span>Suggested CPT Code</span>
-            </span>
-            <span class="bg-[#5A5A40] text-white px-2 py-0.5 rounded text-[11px] font-mono">CPT ${readiness.suggestedCpt.code}</span>
-          </div>
-          <div class="font-semibold text-[#5A5A40] text-xs mb-1">${readiness.suggestedCpt.title}</div>
-          <p class="text-[11px] text-[#8A8471] leading-tight mb-2">${readiness.suggestedCpt.rationale}</p>
-          <div class="text-[10px] text-[#8A8471] italic border-t border-[#E6E2D3] pt-1">
-            *Draft recommendation for provider review. Confirm code in EHR prior to claim submission.
-          </div>
-        </div>
-      `;
-    }
-
-    // Duration Verification
-    if (readiness.sessionDuration) {
-      fieldsHtml += `
-        <div class="p-3 bg-white rounded-xl border border-[#E6E2D3] mb-3 text-xs text-[#33322E]">
-          <div class="flex items-center gap-1.5 font-bold text-[#5A5A40] mb-1">
-            <span class="material-symbols-outlined text-base">schedule</span>
-            <span>Duration Verification</span>
-          </div>
-          <p class="text-[11px] text-[#8A8471] leading-tight">${readiness.sessionDuration}</p>
-        </div>
-      `;
-    }
-
-    // Medical Necessity Linkage
-    if (readiness.medicalNecessity) {
-      fieldsHtml += `
-        <div class="p-3 bg-white rounded-xl border border-[#E6E2D3] mb-3 text-xs text-[#33322E]">
-          <div class="flex items-center gap-1.5 font-bold text-[#5A5A40] mb-1">
-            <span class="material-symbols-outlined text-base">medical_services</span>
-            <span>Medical Necessity Linkage</span>
-          </div>
-          <p class="text-[11px] text-[#8A8471] leading-tight">${readiness.medicalNecessity}</p>
-        </div>
-      `;
-    }
-
-    // Audit Risk Flags Checklist
-    if (readiness.auditFlags && readiness.auditFlags.length > 0) {
-      fieldsHtml += `
-        <div class="p-3 bg-[#FAF8F2] rounded-xl border border-[#E6E2D3] mb-3 text-xs text-[#33322E]">
-          <div class="flex items-center gap-1.5 font-bold text-[#5A5A40] mb-2">
-            <span class="material-symbols-outlined text-base text-[#8A8471]">shield</span>
-            <span>Pre-Claim Audit Risk Checklist</span>
-          </div>
-          <div class="space-y-1.5">
-            ${readiness.auditFlags.map(flag => `
-              <div class="flex items-start gap-1.5 text-[11px] text-[#5A5A40]">
-                <span class="material-symbols-outlined text-sm text-[#5A5A40] shrink-0">check_box</span>
-                <span class="leading-tight">${flag}</span>
-              </div>
-            `).join('')}
-          </div>
-        </div>
-      `;
-    }
-
-    // Verified Compliance Checks
-    if (readiness.checksPassed && readiness.checksPassed.length > 0) {
-      fieldsHtml += `
-        <div class="mb-3 space-y-1">
-          <div class="text-[11px] font-bold text-[#5A5A40] uppercase tracking-wider mb-1">Verified Compliance Checks</div>
-          ${readiness.checksPassed.map(chk => `
-            <div class="flex items-center gap-2 text-xs text-[#5A5A40] font-medium p-2 bg-[#E6EBDD]/60 rounded-lg border border-[#E6E2D3]">
-              <span class="material-symbols-outlined text-sm text-[#5A5A40]">check_circle</span>
-              <span>${chk}</span>
-            </div>
-          `).join('')}
-        </div>
-      `;
-    }
-
-    // Missing Fields
-    if (fields.length > 0) {
-      fieldsHtml += `
+      facts.push(`
         <div class="space-y-1">
-          <div class="text-[11px] font-bold text-[#8A8471] uppercase tracking-wider mb-1">Missing / Required Fields</div>
-          ${fields.map(f => `
-            <div class="flex items-center gap-2 text-xs text-[#5A5A40] font-medium p-2 bg-[#F3F0E6] rounded-lg border border-[#E6E2D3]">
-              <span class="material-symbols-outlined text-sm text-[#8A8471]">warning</span>
-              <span>${f}</span>
-            </div>
-          `).join('')}
-        </div>
-      `;
-    } else if (!readiness.checksPassed || readiness.checksPassed.length === 0) {
-      fieldsHtml += `
-        <div class="flex items-center gap-2 text-xs text-[#5A5A40] font-medium p-2.5 bg-[#E6EBDD]/60 rounded-xl border border-[#E6E2D3]">
-          <span class="material-symbols-outlined text-sm text-[#5A5A40]">check_circle</span>
-          <span>All required clinical fields present</span>
-        </div>
-      `;
+          <dt class="text-overline uppercase text-ink-muted">Suggested code</dt>
+          <dd class="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-body-sm text-ink">
+            <span class="rounded-md bg-accent-soft px-1.5 py-0.5 font-mono text-2xs font-semibold text-accent-ink">${escapeHtml(readiness.suggestedCpt.code)}</span>
+            <span>${escapeHtml(readiness.suggestedCpt.title)}</span>
+          </dd>
+        </div>`);
+    }
+    if (readiness.sessionDuration) {
+      facts.push(`
+        <div class="space-y-1">
+          <dt class="text-overline uppercase text-ink-muted">Duration</dt>
+          <dd class="text-body-sm leading-snug text-ink">${escapeHtml(readiness.sessionDuration)}</dd>
+        </div>`);
+    }
+    if (readiness.medicalNecessity) {
+      facts.push(`
+        <div class="space-y-1">
+          <dt class="text-overline uppercase text-ink-muted">Medical necessity</dt>
+          <dd class="text-body-sm leading-snug text-ink">${escapeHtml(readiness.medicalNecessity)}</dd>
+        </div>`);
+    }
+    if (facts.length) blocks.push(`<dl class="space-y-4">${facts.join('')}</dl>`);
+
+    // c) Everything verified or advisory, collapsed.
+    if (checks.length) {
+      blocks.push(disclosure(`${checks.length} check${checks.length === 1 ? '' : 's'} passed`, `
+        <ul class="mt-2 space-y-1.5">
+          ${checks.map(check => `
+            <li class="flex items-start gap-2 text-body-sm leading-snug text-ink-muted">
+              ${icon('circleCheck', 4, 'mt-0.5 shrink-0 text-ok')}
+              <span>${escapeHtml(check)}</span>
+            </li>`).join('')}
+        </ul>`));
     }
 
-    elements.missingFields.innerHTML = fieldsHtml;
+    if (flags.length) {
+      blocks.push(disclosure(`${flags.length} pre-claim audit item${flags.length === 1 ? '' : 's'}`, `
+        <ul class="mt-2 space-y-1.5">
+          ${flags.map(flag => `
+            <li class="flex items-start gap-2 text-body-sm leading-snug text-ink-muted">
+              ${icon('squareCheck', 4, 'mt-0.5 shrink-0 text-accent')}
+              <span>${escapeHtml(flag)}</span>
+            </li>`).join('')}
+        </ul>`));
+    }
+
+    // d) The one claim that has to travel with a suggested code.
+    if (readiness.suggestedCpt) {
+      blocks.push(`
+        <p class="font-display text-2xs italic leading-snug text-ink-subtle">
+          Draft recommendation for provider review. Confirm the code in your EHR before submitting a claim.
+        </p>`);
+    }
+
+    // Hairline rules between blocks carry the separation the boxes used to.
+    elements.missingFields.innerHTML = blocks
+      .map((block, index) => index === 0 ? block : `<div class="border-t border-line pt-5">${block}</div>`)
+      .join('');
   }
 }
 
@@ -714,7 +964,9 @@ function renderReviewScreen(data) {
 async function executeApproveAndDelete() {
   if (elements.approveDeleteBtn) {
     elements.approveDeleteBtn.disabled = true;
-    elements.approveDeleteBtn.innerHTML = `<span class="material-symbols-outlined animate-spin text-sm">sync</span> Purging raw data...`;
+    elements.approveDeleteBtn.innerHTML =
+      '<svg class="icon size-4 animate-spin" viewBox="0 0 24 24" aria-hidden="true">'
+      + '<path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg><span>Purging raw data…</span>';
   }
 
   try {
@@ -747,7 +999,7 @@ async function executeApproveAndDelete() {
     alert('Failed to delete raw session data from backend server.');
     if (elements.approveDeleteBtn) {
       elements.approveDeleteBtn.disabled = false;
-      elements.approveDeleteBtn.textContent = 'Approve and Delete Raw Data';
+      elements.approveDeleteBtn.innerHTML = '<svg class="icon size-[18px]" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/></svg><span>Approve &amp; Wipe Raw Data</span>';
     }
   }
 }
@@ -765,10 +1017,7 @@ function resetSessionState() {
   state.generatedNoteResponse = null;
 
   if (elements.consentCheckbox) elements.consentCheckbox.checked = false;
-  if (elements.confirmConsentBtn) {
-    elements.confirmConsentBtn.disabled = true;
-    elements.confirmConsentBtn.classList.add('opacity-40');
-  }
+  applyConsentState();
 
   updateTimerDisplay();
   showScreen('home-screen');

@@ -1,403 +1,489 @@
 <!DOCTYPE html>
-<html class="light" lang="en">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>HushNote - Privacy-First Therapist Note Assistant</title>
-  
-  <!-- Material Symbols & Google Fonts -->
+  <meta name="description" content="HushNote — privacy-first DAP & SOAP clinical note drafting for therapists. Audio and transcripts never leave the device." />
+  <meta name="theme-color" content="#F8F5F0" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#131614" media="(prefers-color-scheme: dark)" />
+  <title>HushNote — Privacy-First Therapist Note Assistant</title>
+
+  <!-- Theme boot. Must run before first paint or dark-mode reloads flash white. -->
+  <script>
+    (function () {
+      try {
+        var dark = localStorage.getItem('hushnote:theme') === 'dark';
+        document.documentElement.classList.toggle('dark', dark);
+        document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+      } catch (e) {}
+    })();
+  </script>
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23738872'/%3E%3Cg stroke='%23fff' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M8 10.5v11'/%3E%3Cpath d='M12.5 13v6'/%3E%3Cpath d='M17 14.75v2.5'/%3E%3Cpath d='M21.5 13.5h3'/%3E%3Cpath d='M21.5 18.5h3'/%3E%3C/g%3E%3C/svg%3E" />
+
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap" rel="stylesheet" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <!-- Lora italics are loaded deliberately: the type scale uses slanted serif
+       for taglines and subheadings, and a synthesised oblique looks wrong. -->
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/src/index.css" />
 </head>
-<body class="font-body min-h-screen flex flex-col bg-[#FDFBF7] text-[#33322E]">
+<body class="flex min-h-screen flex-col">
 
-  <!-- Shared Header -->
-  <header class="w-full px-8 py-4 max-w-7xl mx-auto flex justify-between items-center z-50 border-b border-[#E6E2D3] bg-[#FDFBF7]">
-    <div class="flex items-center gap-3 cursor-pointer" onclick="window.HushNoteApp?.resetSessionState()">
-      <div class="w-8 h-8 bg-[#5A5A40] rounded-lg flex items-center justify-center text-white font-bold text-xs shadow-sm">
-        HN
-      </div>
-      <h1 class="text-xl font-semibold tracking-tight text-[#5A5A40] font-display">HushNote</h1>
-    </div>
-    <div class="flex items-center gap-4">
-      <div class="flex items-center gap-2 text-xs font-medium text-[#8A8471] bg-[#F3F0E6] px-3 py-1.5 rounded-full border border-[#E6E2D3]">
-        <span class="w-2 h-2 bg-emerald-600 rounded-full animate-pulse"></span>
-        <span class="uppercase tracking-wider text-[11px] font-semibold">LOCAL OLLAMA (GEMMA 4) CONNECTED</span>
-      </div>
-      <button class="text-xs font-semibold text-[#5A5A40] hover:underline flex items-center gap-1" title="Privacy Settings">
-        <span class="material-symbols-outlined text-base">privacy_tip</span>
-        <span>Settings</span>
+  <!-- ===================== HEADER ===================== -->
+  <header class="sticky top-0 z-40 w-full border-b border-line bg-canvas/90 backdrop-blur">
+    <div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3 sm:px-8">
+      <!-- The whole lockup is the control, so the mark and the wordmark both
+           return home rather than only one of them being clickable. -->
+      <button id="homeLockup" type="button" aria-label="HushNote — return to start"
+        class="group flex items-center gap-2.5 rounded-control py-1 pl-1 pr-2.5 text-left transition-colors duration-200 hover:bg-surface">
+        <svg width="30" height="30" viewBox="0 0 32 32" fill="none" role="img" aria-label="HushNote"
+          class="shrink-0 rounded-[9px] shadow-e1 transition-transform duration-200 group-hover:scale-[1.04]">
+          <defs>
+            <linearGradient id="hushmark-sm" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="var(--color-brand)" />
+              <stop offset="100%" stop-color="var(--color-slate)" />
+            </linearGradient>
+          </defs>
+          <rect width="32" height="32" rx="9" fill="url(#hushmark-sm)" />
+          <g stroke="var(--color-on-brand)" stroke-width="2.4" stroke-linecap="round">
+            <path d="M8 10.5v11" /><path d="M12.5 13v6" /><path d="M17 14.75v2.5" opacity="0.85" />
+            <path d="M21.5 13.5h3" opacity="0.7" /><path d="M21.5 18.5h3" opacity="0.55" />
+          </g>
+        </svg>
+        <span class="font-display text-title font-semibold tracking-tight text-accent">HushNote</span>
       </button>
+
+      <div class="flex items-center gap-3">
+        <button id="themeToggle" type="button" aria-pressed="false" title="Switch to dark theme"
+          class="inline-flex size-11 items-center justify-center rounded-control border border-line bg-card text-ink-muted transition-colors duration-200 hover:bg-surface hover:text-accent">
+          <svg id="themeIconSun" class="icon size-[18px]" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+          <svg id="themeIconMoon" class="icon size-[18px]" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></svg>
+          <span class="sr-only" id="themeToggleLabel">Switch to dark theme</span>
+        </button>
+      </div>
     </div>
   </header>
 
-  <!-- SCREEN 1: LANDING / HERO -->
-  <div id="home-screen" class="flex-grow flex flex-col items-center justify-center text-center px-6 relative cinematic-transition">
-    <div class="relative z-10 mb-10 space-y-4 max-w-2xl">
-      <div class="inline-flex items-center gap-1.5 px-4 py-1.5 bg-[#E6EBDD] text-[#5A5A40] rounded-full text-xs font-bold border border-[#E6E2D3] mb-2 uppercase tracking-wider">
-        <span class="material-symbols-outlined text-sm">security</span>
-        <span>Processed locally • Zero cloud audio retention</span>
+  <!-- ===================== SCREEN 1: HOME ===================== -->
+  <main id="home-screen" class="screen mx-auto flex w-full max-w-4xl flex-grow flex-col items-center justify-center gap-12 px-6 py-10 text-center sm:px-8">
+    <div class="flex flex-col items-center gap-6">
+      <svg width="72" height="72" viewBox="0 0 32 32" fill="none" role="img" aria-label="HushNote" class="rounded-[20px] shadow-e2">
+        <defs>
+          <linearGradient id="hushmark-lg" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="var(--color-brand)" />
+            <stop offset="100%" stop-color="var(--color-slate)" />
+          </linearGradient>
+        </defs>
+        <rect width="32" height="32" rx="9" fill="url(#hushmark-lg)" />
+        <g stroke="var(--color-on-brand)" stroke-width="2.4" stroke-linecap="round">
+          <path d="M8 10.5v11" /><path d="M12.5 13v6" /><path d="M17 14.75v2.5" opacity="0.85" />
+          <path d="M21.5 13.5h3" opacity="0.7" /><path d="M21.5 18.5h3" opacity="0.55" />
+        </g>
+      </svg>
+
+      <div class="max-w-[36rem] space-y-3">
+        <h1 class="font-display text-display-xl font-bold tracking-tight text-ink sm:text-[clamp(3.5rem,7vw,5rem)] sm:leading-[1.05]">
+          HushNote
+        </h1>
+        <p class="font-display text-display-md font-medium italic leading-tight text-accent">
+          Record. Review. Keep only the note.
+        </p>
       </div>
-      <h1 class="font-display text-4xl sm:text-5xl font-bold tracking-tight text-[#33322E] leading-tight">
-        Record. Review.<br/>Keep only the note.
-      </h1>
-      <p class="text-base sm:text-lg text-[#8A8471] leading-relaxed">
-        A privacy-first clinical note workflow for therapists. High-fidelity DAP & SOAP progress documentation without permanent audio storage.
-      </p>
     </div>
 
-    <!-- Interactive Sound Orb Button -->
-    <div id="startSessionBtn" class="relative group cursor-pointer orb-hover transition-all duration-500 mb-8">
-      <div class="w-64 h-64 sm:w-80 sm:h-80 rounded-full bg-gradient-to-tr from-[#F3F0E6] via-[#E6EBDD]/60 to-[#FAF8F2] flex items-center justify-center shadow-md border border-[#E6E2D3] relative overflow-hidden">
-        <div class="absolute inset-0 bg-[#5A5A40]/10 rounded-full animate-pulse opacity-25"></div>
-        <div class="bg-[#5A5A40] text-white px-8 py-4 rounded-full shadow-lg font-display font-bold text-xl flex items-center gap-2 group-hover:bg-[#4a4a35] transition-all">
-          <span class="material-symbols-outlined">mic</span>
-          <span>Start Session</span>
-        </div>
-      </div>
-    </div>
+    <!-- Sound orb: a real <button>, keyboard reachable. -->
+    <button id="startSessionBtn" type="button"
+      class="group relative grid size-64 shrink-0 place-items-center rounded-full transition-transform duration-500 ease-cinematic hover:scale-[1.02] active:scale-[0.985] sm:size-80">
+      <!-- Outer glow. Stronger in dark, where low-opacity light gets swallowed. -->
+      <span aria-hidden="true"
+        class="absolute inset-0 animate-breathe rounded-full bg-[radial-gradient(circle_at_50%_45%,color-mix(in_oklab,var(--color-brand)_18%,transparent),transparent_70%)] dark:bg-[radial-gradient(circle_at_50%_45%,color-mix(in_oklab,var(--color-brand)_30%,transparent),transparent_70%)]"></span>
+      <!-- Slow conic drift — motion that doesn't read as a loading spinner. -->
+      <span aria-hidden="true"
+        class="absolute inset-4 animate-drift rounded-full bg-[conic-gradient(from_0deg,transparent,var(--color-brand),transparent_60%)] opacity-[0.08]"></span>
+      <span aria-hidden="true"
+        class="absolute inset-3 rounded-full border border-line bg-gradient-to-tr from-surface via-accent-soft/60 to-card shadow-e2 dark:from-surface dark:via-accent-soft dark:to-raised"></span>
 
-    <div class="text-xs text-[#8A8471] max-w-md">
-      HIPAA compliant architecture. Audio snippet remains only in temporary client memory and is purged upon note approval.
-    </div>
-  </div>
+      <span class="relative flex items-center gap-2 rounded-full bg-brand px-8 py-4 font-display text-body font-bold text-on-brand shadow-e2 transition-colors duration-300 group-hover:bg-brand-hover">
+        <svg class="icon size-5" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19v3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><rect x="9" y="2" width="6" height="13" rx="3"/></svg>
+        <span>Start Session</span>
+      </span>
+    </button>
+  </main>
 
-  <!-- SCREEN 2: INFORMED CONSENT -->
-  <div id="consent-screen" class="fixed inset-0 bg-[#FDFBF7]/95 backdrop-blur-md flex flex-col items-center justify-center p-6 z-50 hidden transition-all duration-500">
-    <div class="max-w-xl w-full space-y-6 text-left bg-[#FAF8F2] p-8 rounded-2xl shadow-md border border-[#E6E2D3]">
-      <div class="flex items-center gap-3 text-[#5A5A40]">
-        <div class="w-12 h-12 rounded-lg bg-[#E6EBDD] flex items-center justify-center text-[#5A5A40]">
-          <span class="material-symbols-outlined text-2xl">verified_user</span>
-        </div>
-        <div>
-          <h2 class="font-display text-2xl font-bold text-[#33322E]">Informed Consent</h2>
-          <p class="text-xs text-[#8A8471]">Prioritize ethical practice and client trust before beginning recording.</p>
-        </div>
-      </div>
-
-      <div class="space-y-4">
-        <label class="flex items-start gap-3 p-4 bg-white/80 rounded-xl cursor-pointer hover:bg-white transition-colors border border-[#E6E2D3]">
-          <!-- TARGET ELEMENT ID: consentCheckbox -->
-          <input type="checkbox" id="consentCheckbox" class="mt-1 h-5 w-5 rounded border-[#E6E2D3] text-[#5A5A40] focus:ring-[#5A5A40] cursor-pointer" />
-          <span class="text-sm font-medium text-[#33322E] leading-relaxed">
-            I confirm the client consented to audio transcription and AI-assisted clinical note drafting for this session.
+  <!-- ===================== SCREEN 2: CONSENT (overlay) ===================== -->
+  <div id="consent-screen" class="screen fixed inset-0 z-50 flex items-center justify-center bg-overlay p-6 backdrop-blur-md" hidden>
+    <div class="w-full max-w-lg outline-none" role="dialog" aria-modal="true" aria-labelledby="consent-title" aria-describedby="consent-desc" tabindex="-1">
+      <div class="overflow-hidden rounded-card border border-line bg-card shadow-e3">
+        <!-- Warm wash behind the emblem so the header reads as one calm field
+             rather than an icon sitting on a white box. -->
+        <div class="bg-linear-to-b from-accent-soft to-card px-8 pb-7 pt-9 text-center">
+          <span aria-hidden="true"
+            class="mx-auto mb-5 flex size-16 items-center justify-center rounded-full bg-linear-to-br from-brand to-accent text-on-brand shadow-e2 ring-8 ring-canvas/70">
+            <svg class="icon size-[26px]" viewBox="0 0 24 24"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></svg>
           </span>
-        </label>
 
-        <div class="flex gap-3 p-4 bg-[#F3F0E6] rounded-xl border border-[#E6E2D3]">
-          <span class="material-symbols-outlined text-[#5A5A40]">shield</span>
-          <div class="text-xs text-[#8A8471] leading-relaxed">
-            <strong class="text-[#5A5A40] font-semibold block mb-0.5">Confidentiality Guarantee:</strong>
-            Raw audio and transcripts are permanently erased immediately after note approval. No data is stored for model training.
+          <h2 id="consent-title" class="font-display text-display-lg font-bold tracking-tight text-ink">
+            Hush is asking to listen
+          </h2>
+          <p id="consent-desc" class="mx-auto mt-2 max-w-[22rem] font-display text-lg italic text-ink-muted">
+            Only with your client&rsquo;s agreement.
+          </p>
+        </div>
+
+        <div class="space-y-5 px-8 pb-8">
+          <label id="consentCard" for="consentCheckbox"
+            class="flex cursor-pointer items-start gap-4 rounded-panel border border-line-strong bg-surface p-4 text-left transition-[background-color,border-color,box-shadow] duration-200 hover:border-brand">
+            <input id="consentCheckbox" type="checkbox" class="sr-only" />
+            <!-- Custom mark: the native box cannot carry the brand fill or the
+                 size this needs to read as the primary action of the screen. -->
+            <span id="consentMark" aria-hidden="true"
+              class="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md border-2 border-line-strong bg-card text-transparent transition-colors duration-200">
+              <svg class="icon size-[15px]" viewBox="0 0 24 24" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg>
+            </span>
+            <span class="text-body-sm font-medium leading-relaxed text-ink">
+              My client agreed to this session being recorded and drafted with AI.
+            </span>
+          </label>
+
+          <!-- Named, not implied. -->
+          <p class="flex items-center justify-center gap-2 text-body-sm text-ink-muted">
+            <svg class="icon size-[14px] text-accent" viewBox="0 0 24 24" aria-hidden="true"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/><path d="M20 2v4"/><path d="M22 4h-4"/><circle cx="4" cy="20" r="2"/></svg>
+            <span>Notes drafted by <span class="font-semibold text-accent">Gemma 4</span>, on this device</span>
+          </p>
+
+          <div class="flex flex-col gap-3 sm:flex-row">
+            <button id="backConsentBtn" type="button"
+              class="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-control border border-line bg-card px-6 py-3 font-display text-body font-semibold text-accent transition-[background-color,color,box-shadow,transform] duration-200 ease-cinematic hover:bg-surface active:scale-[0.985]">
+              Not now
+            </button>
+            <button id="confirmConsentBtn" type="button" disabled
+              class="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-control bg-brand px-6 py-3 font-display text-body font-semibold text-on-brand shadow-e1 transition-[background-color,color,box-shadow,transform] duration-200 ease-cinematic hover:bg-brand-hover active:scale-[0.985] disabled:cursor-not-allowed disabled:bg-surface disabled:text-ink-subtle disabled:shadow-none disabled:active:scale-100">
+              <span>Begin session</span>
+              <svg class="icon size-[18px]" viewBox="0 0 24 24" aria-hidden="true" stroke-width="2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+            </button>
           </div>
         </div>
       </div>
-
-      <div class="flex gap-4 pt-4">
-        <button id="backConsentBtn" class="flex-1 py-3 border border-[#5A5A40] text-[#5A5A40] font-semibold rounded-lg hover:bg-[#F3F0E6] transition-colors text-sm" onclick="window.HushNoteApp?.showScreen('home-screen')">
-          Back
-        </button>
-        <!-- TARGET ELEMENT ID: confirmConsentBtn -->
-        <button id="confirmConsentBtn" class="flex-1 py-3 bg-[#5A5A40] text-white font-semibold rounded-lg hover:bg-[#4a4a35] transition-all opacity-40 shadow-sm text-sm" disabled>
-          Confirm & Proceed
-        </button>
-      </div>
     </div>
   </div>
 
-  <!-- SCREEN 3: RECORDING & TRANSCRIPT -->
-  <div id="recording-screen" class="flex-grow flex flex-col items-center justify-between px-6 pt-6 pb-24 max-w-4xl mx-auto w-full hidden">
-    <!-- Recording Visualizer Header -->
-    <div class="flex flex-col items-center text-center space-y-3 w-full">
-      <div class="flex items-center gap-2 px-3 py-1 bg-[#E6EBDD] text-[#5A5A40] rounded-full text-xs font-bold uppercase tracking-wider border border-[#E6E2D3]">
-        <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-        <span>Recording Session</span>
-      </div>
-      <!-- TARGET ELEMENT ID: recordingTimer -->
-      <h1 id="recordingTimer" class="font-display text-5xl font-bold text-[#5A5A40] tracking-tight">00:00</h1>
+  <!-- ===================== SCREEN 3: RECORDING ===================== -->
+  <main id="recording-screen" class="screen mx-auto flex w-full max-w-4xl flex-grow flex-col gap-6 px-6 py-10 pb-28 sm:px-8" hidden>
+    <button type="button" data-back="home-screen" data-confirm="Discard this session and return to the start?"
+      class="group inline-flex min-h-11 items-center gap-1.5 self-start rounded-control py-2 pr-3 text-body-sm font-medium text-slate transition-colors duration-200 hover:text-slate-ink">
+      <svg class="icon size-4" viewBox="0 0 24 24" aria-hidden="true" stroke-width="2"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+      <span>Discard and start over</span>
+    </button>
 
-      <!-- Waveform Simulation -->
-      <div class="flex items-end gap-1 h-8 mt-2">
-        <div class="waveform-bar w-1.5 bg-[#8A8471] rounded-full" style="animation-delay: 0.1s"></div>
-        <div class="waveform-bar w-1.5 bg-[#5A5A40] rounded-full" style="animation-delay: 0.3s"></div>
-        <div class="waveform-bar w-1.5 bg-[#8A8471] rounded-full" style="animation-delay: 0.5s"></div>
-        <div class="waveform-bar w-1.5 bg-[#5A5A40] rounded-full" style="animation-delay: 0.2s"></div>
-        <div class="waveform-bar w-1.5 bg-[#A3B18A] rounded-full" style="animation-delay: 0.4s"></div>
-      </div>
+    <div class="flex flex-col items-center gap-4 text-center">
+      <span class="inline-flex items-center gap-1.5 rounded-full border border-line bg-danger-soft px-3 py-1 text-overline uppercase text-rec">
+        <span aria-hidden="true" class="size-1.5 shrink-0 animate-pulse rounded-full bg-rec"></span>
+        <span>Recording session</span>
+      </span>
+
+      <p id="recordingTimer" aria-hidden="true"
+        class="font-display text-[clamp(3rem,8vw,4.5rem)] font-bold leading-none tracking-tight text-clay tabular-nums">00:00</p>
+
+      <!-- 28 amplitude bars, populated by app.js so the markup stays readable. -->
+      <div id="waveform" aria-hidden="true" class="flex h-10 items-center justify-center gap-[2px]"></div>
     </div>
 
-    <!-- Audio Playback (Temporary Memory Blob) -->
-    <!-- TARGET ELEMENT ID: audioPlayback -->
-    <audio id="audioPlayback" controls class="w-full mt-4 hidden rounded-lg border border-[#E6E2D3]"></audio>
+    <audio id="audioPlayback" controls class="w-full rounded-control border border-line" hidden></audio>
 
-    <!-- Live Transcript & Manual Pasting Panel -->
-    <div class="w-full bg-[#FAF8F2] rounded-2xl p-6 shadow-sm border border-[#E6E2D3] my-6 flex flex-col gap-3">
-      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-        <div class="flex items-center gap-2 flex-wrap">
-          <h2 class="font-display text-lg font-semibold text-[#33322E] flex items-center gap-2">
-            <span class="material-symbols-outlined text-[#5A5A40]">notes</span>
-            <span>Live Session Transcript</span>
-          </h2>
-          <span id="speechStatusBadge" class="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 bg-[#E6EBDD] text-[#5A5A40] rounded-full border border-[#E6E2D3] flex items-center gap-1">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
-            <span id="speechStatusText">Listening...</span>
-          </span>
-        </div>
-        <button id="loadSampleTranscriptBtn" type="button" class="text-xs text-[#5A5A40] hover:text-[#33322E] font-semibold underline flex items-center gap-1">
-          <span class="material-symbols-outlined text-sm">post_add</span>
+    <section class="flex flex-col gap-4 rounded-card border border-line bg-card p-6 shadow-e1">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <h2 class="flex items-center gap-2 font-display text-title font-semibold text-ink">
+          <svg class="icon size-5 text-accent" viewBox="0 0 24 24" aria-hidden="true"><path d="M13.4 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7.4"/><path d="M2 6h4"/><path d="M2 10h4"/><path d="M2 14h4"/><path d="M2 18h4"/><path d="M21.378 5.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z"/></svg>
+          <span>Live Session Transcript</span>
+        </h2>
+        <span id="speechStatusBadge" role="status" aria-live="polite"
+          class="inline-flex items-center gap-1.5 rounded-full border border-line bg-ok-soft px-3 py-1 text-overline uppercase text-ok">
+          <span aria-hidden="true" class="size-1.5 shrink-0 animate-pulse rounded-full bg-ok"></span>
+          <span id="speechStatusText">Listening</span>
+        </span>
+      </div>
+
+      <div>
+        <label for="transcriptInput" class="sr-only">Session transcript</label>
+        <textarea id="transcriptInput"
+          class="custom-scrollbar min-h-52 w-full resize-y rounded-field border border-line bg-surface p-3.5 text-body-sm leading-[1.7] text-ink transition-colors duration-200 placeholder:text-ink-subtle focus:border-line-strong focus:outline-none"
+          placeholder="Start speaking, or type and paste session notes here. Speech is transcribed live as you talk."></textarea>
+      </div>
+
+      <div>
+        <button id="loadSampleTranscriptBtn" type="button"
+          class="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-control bg-transparent px-3.5 py-2 text-body-sm font-semibold text-accent transition-colors duration-200 hover:bg-accent-soft">
+          <svg class="icon size-4" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 22h14a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v4"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M3 15h6"/><path d="M6 12v6"/></svg>
           <span>Load Sample Clinical Transcript</span>
         </button>
       </div>
+    </section>
 
-      <!-- TARGET ELEMENT ID: transcriptInput -->
-      <textarea id="transcriptInput" rows="6" class="w-full bg-white border border-[#E6E2D3] rounded-xl p-4 text-sm text-[#33322E] focus:ring-1 focus:ring-[#5A5A40] focus:border-[#5A5A40] focus:outline-none custom-scrollbar leading-relaxed" placeholder="Start speaking or type/paste session notes here... Speech recognition will transcribe live as you speak."></textarea>
-    </div>
-
-    <!-- Fixed Floating Controls -->
-    <div class="fixed bottom-10 left-0 right-0 flex justify-center gap-4 px-6 z-40">
-      <!-- TARGET ELEMENT ID: startRecordingBtn -->
-      <button id="startRecordingBtn" class="px-6 py-3 bg-[#8A8471] text-white rounded-lg font-semibold text-sm shadow-md hover:opacity-90 transition-all flex items-center gap-2" hidden>
-        <span class="material-symbols-outlined">mic</span>
+    <div class="fixed inset-x-0 bottom-0 z-40 flex justify-center bg-gradient-to-t from-canvas via-canvas/90 to-transparent px-6 pb-8 pt-12">
+      <button id="startRecordingBtn" type="button" hidden
+        class="inline-flex min-h-12 items-center justify-center gap-2 rounded-control border border-line bg-card px-6 py-3 font-display text-body font-semibold text-accent shadow-e1 transition-colors duration-200 hover:bg-surface">
+        <svg class="icon size-5" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19v3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><rect x="9" y="2" width="6" height="13" rx="3"/></svg>
         <span>Start Rec</span>
       </button>
 
-      <!-- TARGET ELEMENT ID: stopRecordingBtn -->
-      <button id="stopRecordingBtn" class="px-8 py-3.5 bg-[#5A5A40] text-white rounded-lg font-display font-bold text-base shadow-lg hover:bg-[#4a4a35] transition-all flex items-center gap-3">
-        <span class="material-symbols-outlined">stop_circle</span>
+      <button id="stopRecordingBtn" type="button"
+        class="inline-flex min-h-12 items-center justify-center gap-2 rounded-control bg-brand px-6 py-3 font-display text-body font-semibold text-on-brand shadow-e1 transition-[background-color,transform] duration-200 ease-cinematic hover:bg-brand-hover active:scale-[0.985]">
+        <svg class="icon size-5" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
         <span>Stop and Review Transcript</span>
       </button>
     </div>
-  </div>
+  </main>
 
-  <!-- SCREEN 4: FORMAT SELECTION -->
-  <div id="format-screen" class="flex-grow flex flex-col items-center justify-center px-6 py-10 max-w-xl mx-auto w-full hidden">
-    <div class="text-center mb-8 space-y-2">
-      <h1 class="font-display text-3xl font-bold text-[#33322E]">Select Note Format</h1>
-      <p class="text-sm text-[#8A8471]">Choose the clinical documentation structure for this session.</p>
-    </div>
-
-    <!-- TARGET ELEMENT ID / Container: noteFormat -->
-    <div id="noteFormat" class="w-full space-y-4">
-      <div class="selection-card p-5 rounded-2xl bg-[#FAF8F2] cursor-pointer flex items-center gap-4 border border-[#E6E2D3] transition-all active-selection" data-format="DAP">
-        <div class="w-12 h-12 rounded-lg bg-[#E6EBDD] flex items-center justify-center text-[#5A5A40]">
-          <span class="material-symbols-outlined">description</span>
-        </div>
-        <div class="flex-grow">
-          <div class="flex justify-between items-center">
-            <span class="font-display font-semibold text-lg text-[#33322E]">DAP Format</span>
-            <span class="material-symbols-outlined text-[#5A5A40]">check_circle</span>
-          </div>
-          <p class="text-xs text-[#8A8471] mt-1">Data, Assessment, and Plan standard for behavioral health.</p>
-        </div>
-      </div>
-
-      <div class="selection-card p-5 rounded-2xl bg-[#FAF8F2] cursor-pointer flex items-center gap-4 border border-[#E6E2D3] transition-all" data-format="SOAP">
-        <div class="w-12 h-12 rounded-lg bg-[#F3F0E6] flex items-center justify-center text-[#8A8471]">
-          <span class="material-symbols-outlined">medical_information</span>
-        </div>
-        <div class="flex-grow">
-          <div class="flex justify-between items-center">
-            <span class="font-display font-semibold text-lg text-[#33322E]">SOAP Format</span>
-            <span class="material-symbols-outlined text-[#8A8471]">check_circle</span>
-          </div>
-          <p class="text-xs text-[#8A8471] mt-1">Subjective, Objective, Assessment, and Plan medical format.</p>
-        </div>
-      </div>
-
-      <div class="selection-card p-5 rounded-2xl bg-[#FAF8F2] cursor-pointer flex items-center gap-4 border border-[#E6E2D3] transition-all" data-format="BOTH">
-        <div class="w-12 h-12 rounded-lg bg-[#E6EBDD] flex items-center justify-center text-[#5A5A40]">
-          <span class="material-symbols-outlined">dynamic_feed</span>
-        </div>
-        <div class="flex-grow">
-          <div class="flex justify-between items-center">
-            <span class="font-display font-semibold text-lg text-[#33322E]">Both (DAP + SOAP)</span>
-            <span class="material-symbols-outlined text-[#8A8471]">check_circle</span>
-          </div>
-          <p class="text-xs text-[#8A8471] mt-1">Generate comprehensive versions for clinical and insurance records.</p>
-        </div>
-      </div>
-    </div>
-
-    <button id="generateNoteBtn" class="w-full mt-8 bg-[#5A5A40] text-white font-display text-base font-bold py-3.5 rounded-lg shadow-sm hover:bg-[#4a4a35] transition-all flex items-center justify-center gap-2">
-      <span>Continue to Purpose Selection</span>
-      <span class="material-symbols-outlined text-base">arrow_forward</span>
+  <!-- ===================== SCREEN 4: FORMAT ===================== -->
+  <main id="format-screen" class="screen mx-auto flex w-full max-w-xl flex-grow flex-col justify-center px-6 py-10 sm:px-8" hidden>
+    <button type="button" data-back="recording-screen"
+      class="group mb-4 inline-flex min-h-11 items-center gap-1.5 self-start rounded-control py-2 pr-3 text-body-sm font-medium text-slate transition-colors duration-200 hover:text-slate-ink">
+      <svg class="icon size-4" viewBox="0 0 24 24" aria-hidden="true" stroke-width="2"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+      <span>Back to transcript</span>
     </button>
-  </div>
 
-  <!-- SCREEN 5: PROCESSING ANIMATION -->
-  <div id="processing-screen" class="fixed inset-0 bg-[#FDFBF7]/95 backdrop-blur-md flex flex-col items-center justify-center p-6 z-50 hidden">
-    <div class="flex flex-col items-center max-w-md text-center space-y-6">
-      <div class="w-20 h-20 rounded-full bg-[#E6EBDD] flex items-center justify-center animate-spin border border-[#E6E2D3]">
-        <span class="material-symbols-outlined text-4xl text-[#5A5A40]">auto_awesome</span>
-      </div>
-      <div class="space-y-2">
-        <h2 class="font-display text-2xl font-bold text-[#5A5A40]">Distilling clinical note...</h2>
-        <p class="text-sm text-[#8A8471]">Generating DAP/SOAP structure using local Ollama Gemma 4 engine...</p>
-      </div>
-      <div class="px-4 py-2 bg-[#FAF8F2] rounded-full border border-[#E6E2D3] flex items-center gap-2 text-xs text-[#8A8471]">
-        <span class="material-symbols-outlined text-[#5A5A40] text-sm">lock</span>
-        <span>Strict Fact Enforcement • Zero Hallucination Mode</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- SCREEN 6: PURPOSE SELECTION -->
-  <div id="purpose-screen" class="flex-grow flex flex-col items-center justify-center px-6 py-10 max-w-xl mx-auto w-full hidden">
-    <div class="text-center mb-8 space-y-2">
-      <h1 class="font-display text-3xl font-bold text-[#33322E]">Select Documentation Purpose</h1>
-      <p class="text-sm text-[#8A8471]">Readiness checks and checklist items will adapt based on this target.</p>
+    <div class="mb-9 space-y-2 text-center">
+      <p class="text-overline uppercase text-slate">Step 1 of 2</p>
+      <h1 class="font-display text-display-lg font-bold tracking-tight text-ink">How should it be written?</h1>
     </div>
 
-    <form id="purpose-form" class="w-full space-y-4">
-      <label class="block p-5 rounded-2xl bg-[#FAF8F2] border border-[#E6E2D3] cursor-pointer hover:bg-[#F3F0E6] transition-all">
-        <div class="flex items-center gap-4">
-          <input type="radio" name="purpose" value="progress" checked class="h-5 w-5 text-[#5A5A40] focus:ring-[#5A5A40]" />
-          <div>
-            <div class="flex items-center gap-2">
-              <span class="material-symbols-outlined text-lg text-[#5A5A40]">monitoring</span>
-              <h3 class="font-display font-semibold text-lg text-[#5A5A40]">Progress Tracking</h3>
-            </div>
-            <p class="text-xs text-[#8A8471] mt-1 leading-relaxed">Focus on clinical outcomes, symptom changes, patient progress, and DAP/SOAP session documentation.</p>
-          </div>
-        </div>
+    <fieldset id="noteFormat" class="space-y-4 border-0 p-0">
+      <legend class="sr-only">Clinical note format</legend>
+
+      <label class="radio-card group relative flex cursor-pointer items-start gap-4 rounded-card border p-5 shadow-e1 transition-[background-color,border-color,box-shadow] duration-200 ease-cinematic" data-format="DAP">
+        <input type="radio" name="note-format" value="DAP" class="sr-only" checked />
+        <span aria-hidden="true" class="radio-icon flex size-11 shrink-0 items-center justify-center rounded-panel transition-colors duration-200">
+          <svg class="icon size-5" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+        </span>
+        <span class="min-w-0 flex-1">
+          <span class="flex items-center justify-between gap-2">
+            <span class="font-display text-title font-semibold text-ink">DAP Format</span>
+            <svg class="radio-check icon size-[18px] shrink-0 text-accent" viewBox="0 0 24 24" aria-hidden="true" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+          </span>
+          <span class="mt-1 block text-body-sm text-ink-muted">Data, Assessment, and Plan standard for behavioral health.</span>
+        </span>
       </label>
 
-      <label class="block p-5 rounded-2xl bg-[#FAF8F2] border border-[#E6E2D3] cursor-pointer hover:bg-[#F3F0E6] transition-all">
-        <div class="flex items-center gap-4">
-          <input type="radio" name="purpose" value="billing_insurance" class="h-5 w-5 text-[#5A5A40] focus:ring-[#5A5A40]" />
-          <div>
-            <div class="flex items-center gap-2">
-              <span class="material-symbols-outlined text-lg text-[#5A5A40]">verified_user</span>
-              <h3 class="font-display font-semibold text-lg text-[#5A5A40]">Billing & Insurance Readiness Report</h3>
-            </div>
-            <p class="text-xs text-[#8A8471] mt-1 leading-relaxed">Complete audit report with CPT code recommendation, session duration verification, medical necessity linkage, and claim compliance flags.</p>
-          </div>
-        </div>
+      <label class="radio-card group relative flex cursor-pointer items-start gap-4 rounded-card border p-5 shadow-e1 transition-[background-color,border-color,box-shadow] duration-200 ease-cinematic" data-format="SOAP">
+        <input type="radio" name="note-format" value="SOAP" class="sr-only" />
+        <span aria-hidden="true" class="radio-icon flex size-11 shrink-0 items-center justify-center rounded-panel transition-colors duration-200">
+          <svg class="icon size-5" viewBox="0 0 24 24"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 14h6"/><path d="M12 17v-6"/></svg>
+        </span>
+        <span class="min-w-0 flex-1">
+          <span class="flex items-center justify-between gap-2">
+            <span class="font-display text-title font-semibold text-ink">SOAP Format</span>
+            <svg class="radio-check icon size-[18px] shrink-0 text-accent" viewBox="0 0 24 24" aria-hidden="true" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+          </span>
+          <span class="mt-1 block text-body-sm text-ink-muted">Subjective, Objective, Assessment, and Plan medical format.</span>
+        </span>
       </label>
 
-      <button type="submit" id="submitPurposeBtn" class="w-full mt-6 bg-[#5A5A40] text-white font-display text-base font-bold py-3.5 rounded-lg shadow-sm hover:bg-[#4a4a35] transition-all flex items-center justify-center gap-2">
-        <span>Generate & Review Draft</span>
-        <span class="material-symbols-outlined text-base">auto_awesome</span>
+      <label class="radio-card group relative flex cursor-pointer items-start gap-4 rounded-card border p-5 shadow-e1 transition-[background-color,border-color,box-shadow] duration-200 ease-cinematic" data-format="BOTH">
+        <input type="radio" name="note-format" value="BOTH" class="sr-only" />
+        <span aria-hidden="true" class="radio-icon flex size-11 shrink-0 items-center justify-center rounded-panel transition-colors duration-200">
+          <svg class="icon size-5" viewBox="0 0 24 24"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"/><path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"/></svg>
+        </span>
+        <span class="min-w-0 flex-1">
+          <span class="flex items-center justify-between gap-2">
+            <span class="font-display text-title font-semibold text-ink">Both (DAP + SOAP)</span>
+            <svg class="radio-check icon size-[18px] shrink-0 text-accent" viewBox="0 0 24 24" aria-hidden="true" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+          </span>
+          <span class="mt-1 block text-body-sm text-ink-muted">Generate comprehensive versions for clinical and insurance records.</span>
+        </span>
+      </label>
+    </fieldset>
+
+    <button id="generateNoteBtn" type="button"
+      class="mt-8 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-control bg-brand px-6 py-3 font-display text-body font-semibold text-on-brand shadow-e1 transition-[background-color,transform] duration-200 ease-cinematic hover:bg-brand-hover active:scale-[0.985]">
+      <span>Continue to Purpose Selection</span>
+      <svg class="icon size-[18px]" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+    </button>
+  </main>
+
+  <!-- ===================== SCREEN 6: PURPOSE ===================== -->
+  <main id="purpose-screen" class="screen mx-auto flex w-full max-w-xl flex-grow flex-col justify-center px-6 py-10 sm:px-8" hidden>
+    <button type="button" data-back="format-screen"
+      class="group mb-4 inline-flex min-h-11 items-center gap-1.5 self-start rounded-control py-2 pr-3 text-body-sm font-medium text-slate transition-colors duration-200 hover:text-slate-ink">
+      <svg class="icon size-4" viewBox="0 0 24 24" aria-hidden="true" stroke-width="2"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+      <span>Back to format</span>
+    </button>
+
+    <div class="mb-9 space-y-2 text-center">
+      <p class="text-overline uppercase text-slate">Step 2 of 2</p>
+      <h1 class="font-display text-display-lg font-bold tracking-tight text-ink">What is this note for?</h1>
+    </div>
+
+    <div id="purposeError" role="alert" class="mb-6 flex items-start gap-3 rounded-panel border border-line bg-danger-soft p-4" hidden>
+      <svg class="icon mt-0.5 size-[18px] text-danger" viewBox="0 0 24 24" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+      <div class="space-y-1">
+        <p class="text-body-sm font-semibold text-danger">Note generation failed</p>
+        <p id="purposeErrorText" class="text-body-sm text-ink-muted"></p>
+      </div>
+    </div>
+
+    <form id="purpose-form" class="space-y-4">
+      <fieldset class="space-y-4 border-0 p-0">
+        <legend class="sr-only">Documentation purpose</legend>
+
+        <label class="radio-card group relative flex cursor-pointer items-start gap-4 rounded-card border p-5 shadow-e1 transition-[background-color,border-color,box-shadow] duration-200 ease-cinematic">
+          <input type="radio" name="purpose" value="progress" class="sr-only" checked />
+          <span aria-hidden="true" class="radio-icon flex size-11 shrink-0 items-center justify-center rounded-panel transition-colors duration-200">
+            <svg class="icon size-5" viewBox="0 0 24 24"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></svg>
+          </span>
+          <span class="min-w-0 flex-1">
+            <span class="flex items-center justify-between gap-2">
+              <span class="font-display text-title font-semibold text-ink">Progress Tracking</span>
+              <svg class="radio-check icon size-[18px] shrink-0 text-accent" viewBox="0 0 24 24" aria-hidden="true" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+            </span>
+            <span class="mt-1 block text-body-sm text-ink-muted">Focus on clinical outcomes, symptom changes, patient progress, and DAP/SOAP session documentation.</span>
+          </span>
+        </label>
+
+        <label class="radio-card group relative flex cursor-pointer items-start gap-4 rounded-card border p-5 shadow-e1 transition-[background-color,border-color,box-shadow] duration-200 ease-cinematic">
+          <input type="radio" name="purpose" value="billing_insurance" class="sr-only" />
+          <span aria-hidden="true" class="radio-icon flex size-11 shrink-0 items-center justify-center rounded-panel transition-colors duration-200">
+            <svg class="icon size-5" viewBox="0 0 24 24"><path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="m9 12 2 2 4-4"/></svg>
+          </span>
+          <span class="min-w-0 flex-1">
+            <span class="flex items-center justify-between gap-2">
+              <span class="font-display text-title font-semibold text-ink">Billing &amp; Insurance Readiness Report</span>
+              <svg class="radio-check icon size-[18px] shrink-0 text-accent" viewBox="0 0 24 24" aria-hidden="true" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+            </span>
+            <span class="mt-1 block text-body-sm text-ink-muted">Complete audit report with CPT code recommendation, session duration verification, medical necessity linkage, and claim compliance flags.</span>
+          </span>
+        </label>
+      </fieldset>
+
+      <button type="submit" id="submitPurposeBtn"
+        class="mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-control bg-brand px-6 py-3 font-display text-body font-semibold text-on-brand shadow-e1 transition-[background-color,transform] duration-200 ease-cinematic hover:bg-brand-hover active:scale-[0.985]">
+        <span id="submitPurposeLabel">Generate &amp; Review Draft</span>
+        <svg class="icon size-[18px]" viewBox="0 0 24 24" aria-hidden="true"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/><path d="M20 2v4"/><path d="M22 4h-4"/><circle cx="4" cy="20" r="2"/></svg>
       </button>
     </form>
-  </div>
+  </main>
 
-  <!-- SCREEN 7: CLINICAL NOTE REVIEW COCKPIT -->
-  <div id="review-screen" class="flex-grow max-w-6xl mx-auto w-full px-6 py-8 hidden">
-    <!-- Header Controls -->
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 mb-8 border-b border-[#E6E2D3]">
-      <div>
-        <div class="flex items-center gap-2 text-xs font-bold text-[#8A8471] uppercase tracking-wider mb-1">
-          <span class="material-symbols-outlined text-sm text-[#5A5A40]">fact_check</span>
-          <span>Draft Review Cockpit</span>
+  <!-- ===================== SCREEN 5: PROCESSING (overlay) ===================== -->
+  <div id="processing-screen" class="screen fixed inset-0 z-50 flex items-center justify-center bg-overlay p-6 backdrop-blur-md" role="status" aria-live="polite" aria-busy="true" hidden>
+    <div class="w-full max-w-md">
+      <div class="overflow-hidden rounded-card border border-line bg-card shadow-e3">
+        <div class="flex flex-col items-center gap-5 bg-linear-to-b from-accent-soft to-card px-8 pb-7 pt-9 text-center">
+          <!-- Two counter-rotating rings around a static icon. -->
+          <div aria-hidden="true" class="relative grid size-20 place-items-center">
+            <span class="absolute inset-0 animate-halo rounded-full bg-[conic-gradient(from_0deg,transparent_0deg,var(--color-brand)_90deg,transparent_180deg)] [mask:radial-gradient(farthest-side,transparent_calc(100%-3px),#000_calc(100%-3px))]"></span>
+            <span class="absolute inset-2 animate-halo-slow rounded-full bg-[conic-gradient(from_180deg,transparent_0deg,var(--color-accent)_120deg,transparent_240deg)] opacity-40 [mask:radial-gradient(farthest-side,transparent_calc(100%-3px),#000_calc(100%-3px))]"></span>
+            <svg class="icon size-7 text-accent" viewBox="0 0 24 24"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/><path d="M20 2v4"/><path d="M22 4h-4"/><circle cx="4" cy="20" r="2"/></svg>
+          </div>
+
+          <div class="space-y-2">
+            <span id="routedTier" class="inline-flex items-center gap-1.5 rounded-full bg-linear-to-br from-brand to-accent px-3 py-1 font-mono text-overline uppercase text-on-brand shadow-e1">
+              <svg class="icon size-3" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20v2"/><path d="M12 2v2"/><path d="M17 20v2"/><path d="M17 2v2"/><path d="M2 12h2"/><path d="M2 17h2"/><path d="M2 7h2"/><path d="M20 12h2"/><path d="M20 17h2"/><path d="M20 7h2"/><path d="M7 20v2"/><path d="M7 2v2"/><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="8" y="8" width="8" height="8" rx="1"/></svg>
+              <span id="routedTierLabel">Gemma 4</span>
+            </span>
+            <h2 class="font-display text-display-md font-bold tracking-tight text-ink">Drafting your note</h2>
+            <p id="routedTierReason" class="mx-auto max-w-[20rem] text-body-sm text-ink-muted">Running on this device.</p>
+          </div>
         </div>
-        <h1 class="font-display text-3xl font-bold text-[#33322E]">Client Session Note Draft</h1>
-      </div>
-      <div class="flex items-center gap-3">
-        <!-- TARGET ELEMENT ID: approveDeleteBtn -->
-        <button id="approveDeleteBtn" class="px-6 py-3 bg-[#5A5A40] text-white rounded-lg font-bold text-xs uppercase tracking-wider shadow-sm hover:bg-[#4a4a35] transition-all flex items-center gap-2">
-          <span class="material-symbols-outlined text-sm">done_all</span>
-          <span>APPROVE & WIPE RAW DATA</span>
-        </button>
+
+        <ol id="processingSteps" class="space-y-2 px-8 pb-8"></ol>
       </div>
     </div>
+  </div>
 
-    <!-- Review Grid -->
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
-      <!-- Left Column: Editable Note Body -->
-      <div class="lg:col-span-8 space-y-6">
-        <div class="bg-[#FAF8F2] rounded-2xl p-6 shadow-sm border border-[#E6E2D3]">
-          <div class="flex justify-between items-center mb-4 pb-3 border-b border-[#E6E2D3]">
-            <h2 class="font-display text-lg font-semibold text-[#33322E] flex items-center gap-2">
-              <span class="material-symbols-outlined text-[#5A5A40]">edit_note</span>
-              <span>Clinical Progress Note</span>
-            </h2>
-            <span class="text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 bg-[#E6EBDD] text-[#5A5A40] rounded-md border border-[#E6E2D3]">Editable</span>
-          </div>
+  <!-- ===================== SCREEN 7: REVIEW ===================== -->
+  <main id="review-screen" class="screen mx-auto flex w-full max-w-6xl flex-grow flex-col gap-6 px-6 py-10 sm:px-8" hidden>
+    <button type="button" data-back="purpose-screen" data-confirm="Go back and draft this note again? The current draft will be replaced."
+      class="group inline-flex min-h-11 items-center gap-1.5 self-start rounded-control py-2 pr-3 text-body-sm font-medium text-slate transition-colors duration-200 hover:text-slate-ink">
+      <svg class="icon size-4" viewBox="0 0 24 24" aria-hidden="true" stroke-width="2"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+      <span>Back to purpose</span>
+    </button>
 
-          <!-- TARGET ELEMENT ID: noteBody -->
-          <div id="noteBody" class="space-y-4">
-            <!-- Dynamically populated by app.js -->
-          </div>
-        </div>
-
-        <!-- Evidence Timestamps Box -->
-        <div class="bg-[#FAF8F2] rounded-2xl p-6 shadow-sm border border-[#E6E2D3] space-y-3">
-          <h3 class="font-display font-semibold text-xs text-[#8A8471] uppercase tracking-wider flex items-center gap-2">
-            <span class="material-symbols-outlined text-[#5A5A40] text-base">format_quote</span>
-            <span>Timestamped Session Evidence</span>
-          </h3>
-          <!-- TARGET ELEMENT ID: evidenceChips -->
-          <div id="evidenceChips" class="flex flex-wrap gap-2">
-            <!-- Dynamically populated by app.js -->
-          </div>
-        </div>
+    <div class="flex flex-col gap-4 border-b border-line pb-6 md:flex-row md:items-center md:justify-between">
+      <div class="space-y-1">
+        <p class="flex items-center gap-2 text-overline uppercase text-ink-muted">
+          <svg class="icon size-[14px] text-accent" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 10.656V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12.344"/><path d="m9 11 3 3L22 4"/></svg>
+          <span>Draft Review Cockpit</span>
+        </p>
+        <h1 class="font-display text-display-lg font-bold text-ink">Client Session Note Draft</h1>
       </div>
 
-      <!-- Right Column: Readiness & Missing Fields Checklist -->
-      <div class="lg:col-span-4 space-y-6">
-        <div class="bg-[#FAF8F2] rounded-2xl p-6 shadow-sm border border-[#E6E2D3] space-y-5">
-          <h2 class="font-display text-lg font-semibold text-[#33322E] flex items-center gap-2">
-            <span class="material-symbols-outlined text-[#5A5A40]">verified</span>
+      <button id="approveDeleteBtn" type="button"
+        class="inline-flex min-h-12 items-center justify-center gap-2 rounded-control bg-brand px-6 py-3 font-display text-body font-semibold text-on-brand shadow-e1 transition-[background-color,transform] duration-200 ease-cinematic hover:bg-brand-hover active:scale-[0.985] disabled:cursor-not-allowed disabled:bg-surface disabled:text-ink-subtle disabled:shadow-none">
+        <svg class="icon size-[18px]" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/></svg>
+        <span>Approve &amp; Wipe Raw Data</span>
+      </button>
+    </div>
+
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-12">
+      <div class="space-y-6 lg:col-span-8">
+        <section class="rounded-card border border-line bg-card p-6 shadow-e1">
+          <div class="mb-4 flex items-center justify-between gap-3 border-b border-line pb-3">
+            <h2 class="flex items-center gap-2 font-display text-title font-semibold text-ink">
+              <svg class="icon size-5 text-accent" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"/></svg>
+              <span>Clinical Progress Note</span>
+            </h2>
+            <span class="inline-flex items-center rounded-full border border-line bg-accent-soft px-3 py-1 text-overline uppercase text-accent-ink">Editable</span>
+          </div>
+          <div id="noteBody" class="space-y-5"></div>
+        </section>
+
+        <section class="space-y-3 rounded-card border border-line bg-card p-6 shadow-e1">
+          <h2 class="flex items-center gap-2 font-display text-title font-semibold text-ink">
+            <svg class="icon size-5 text-accent" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/><path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/></svg>
+            <span>Timestamped Session Evidence</span>
+          </h2>
+          <div id="evidenceChips" class="flex flex-wrap gap-2"></div>
+        </section>
+      </div>
+
+      <div class="space-y-6 lg:col-span-4">
+        <section class="space-y-5 rounded-card border border-line bg-card p-6 shadow-e1">
+          <h2 class="flex items-center gap-2 font-display text-title font-semibold text-ink">
+            <svg class="icon size-5 text-accent" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
             <span>Readiness Report</span>
           </h2>
 
-          <!-- TARGET ELEMENT ID: readinessLabel -->
-          <div class="inline-block">
-            <span id="readinessLabel" class="px-3 py-1 bg-[#E6EBDD] text-[#5A5A40] rounded-lg text-xs font-bold border border-[#E6E2D3]">
+          <div>
+            <span id="readinessLabel" class="inline-flex items-center rounded-full border border-line bg-accent-soft px-3 py-1 text-overline uppercase text-accent-ink">
               Ready for therapist review
             </span>
           </div>
 
-          <!-- TARGET ELEMENT ID: missingFields -->
-          <div id="missingFields" class="space-y-2 pt-2 border-t border-[#E6E2D3]">
-            <!-- Dynamically populated by app.js -->
-          </div>
+          <!-- Blocks carry their own hairline rules, so no border here. -->
+          <div id="missingFields" class="space-y-5"></div>
+        </section>
+      </div>
+    </div>
+  </main>
 
-          <div class="p-4 bg-[#F3F0E6] rounded-xl border border-[#E6E2D3] text-xs text-[#8A8471] leading-relaxed">
-            <strong class="text-[#5A5A40] font-semibold block mb-1">Privacy Guarantee</strong>
-            Approving this note permanently erases raw audio buffers and transcripts from temporary server memory.
-          </div>
+  <!-- ===================== SCREEN 8: SUCCESS (overlay) ===================== -->
+  <div id="success-screen" class="screen fixed inset-0 z-50 flex items-center justify-center bg-overlay p-6 backdrop-blur-md" hidden>
+    <div class="w-full max-w-md" role="dialog" aria-modal="true" aria-labelledby="success-title" tabindex="-1">
+      <div class="space-y-6 rounded-card border border-line bg-card p-8 text-center shadow-e3">
+        <span aria-hidden="true" class="mx-auto flex size-20 items-center justify-center rounded-full bg-ok-soft text-ok">
+          <svg class="icon size-10" viewBox="0 0 24 24" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+        </span>
+
+        <div class="space-y-2">
+          <h1 id="success-title" tabindex="-1" class="font-display text-display-lg font-bold tracking-tight text-ink outline-none">
+            The note is yours
+          </h1>
+          <p class="mx-auto max-w-[20rem] font-display text-lg italic text-ink-muted">Everything else is gone.</p>
         </div>
+
+        <p class="flex items-center justify-center gap-2 text-body-sm text-ink-muted">
+          <svg class="icon size-[14px] text-accent" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          <span>Audio and transcript erased from memory</span>
+        </p>
+
+        <button id="startNewSessionBtn" type="button"
+          class="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-control bg-brand px-6 py-3 font-display text-body font-semibold text-on-brand shadow-e1 transition-[background-color,transform] duration-200 ease-cinematic hover:bg-brand-hover active:scale-[0.985]">
+          Start a new session
+        </button>
       </div>
     </div>
   </div>
 
-  <!-- SCREEN 8: CONFIDENTIALITY MAINTAINED / SUCCESS -->
-  <div id="success-screen" class="fixed inset-0 bg-[#FDFBF7] flex flex-col items-center justify-center p-6 z-50 hidden">
-    <div class="max-w-md w-full text-center space-y-6 bg-[#FAF8F2] p-8 rounded-3xl shadow-xl border border-[#E6E2D3]">
-      <div class="w-20 h-20 rounded-full bg-[#E6EBDD] text-[#5A5A40] flex items-center justify-center mx-auto border border-[#E6E2D3]">
-        <span class="material-symbols-outlined text-5xl">check_circle</span>
-      </div>
-
-      <div class="space-y-2">
-        <h1 class="font-display text-2xl font-bold text-[#33322E]">Confidentiality Maintained</h1>
-        <p class="text-sm text-[#8A8471]">Raw transcript deleted. Only the final approved clinical note remains in state.</p>
-      </div>
-
-      <div class="p-4 bg-[#F3F0E6] rounded-xl text-xs text-left space-y-2 border border-[#E6E2D3]">
-        <div class="flex items-center gap-2 text-[#5A5A40] font-semibold">
-          <span class="material-symbols-outlined text-base">verified_user</span>
-          <span>Privacy Action Completed</span>
-        </div>
-        <p class="text-[#8A8471]">Audio buffer and session transcript purged from memory.</p>
-      </div>
-
-      <button class="w-full py-3.5 bg-[#5A5A40] text-white rounded-lg font-bold text-xs uppercase tracking-wider shadow-sm hover:bg-[#4a4a35] transition-all" onclick="window.HushNoteApp?.resetSessionState()">
-        Start New Session
-      </button>
-    </div>
-  </div>
-
-  <!-- Bottom Privacy Notification Strip -->
-  <div class="bg-[#33322E] text-white text-[10px] py-2 text-center uppercase tracking-[0.2em] font-medium border-t border-[#E6E2D3]">
-    Privacy Mode Active: Raw audio & transcript never leave this device. Encrypted at rest.
-  </div>
-
-  <!-- Modular Application Logic Script -->
   <script type="module" src="/app.js"></script>
 </body>
 </html>

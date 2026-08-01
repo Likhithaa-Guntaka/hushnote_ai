@@ -1,96 +1,330 @@
 @import "tailwindcss";
 
-@theme {
-  --color-tertiary-container: #E6EBDD;
-  --color-error-container: #ffdad6;
-  --color-outline-variant: #E6E2D3;
-  --color-primary-container: #E6EBDD;
-  --color-outline: #8A8471;
-  --color-surface-tint: #5A5A40;
-  --color-secondary-container: #F3F0E6;
-  --color-on-primary-container: #33322E;
-  --color-on-secondary-container: #5A5A40;
-  --color-on-background: #33322E;
-  --color-primary: #5A5A40;
-  --color-surface-container-lowest: #ffffff;
-  --color-on-surface: #33322E;
-  --color-on-surface-variant: #8A8471;
-  --color-on-primary-fixed-variant: #5A5A40;
-  --color-on-tertiary-container: #33322E;
-  --color-secondary: #8A8471;
-  --color-surface-container: #F3F0E6;
-  --color-surface-container-low: #FAF8F2;
-  --color-surface-container-high: #E6E2D3;
-  --color-surface-container-highest: #E6E2D3;
-  --color-surface-dim: #E6E2D3;
-  --color-on-primary: #ffffff;
-  --color-surface-bright: #FDFBF7;
-  --color-surface-variant: #F3F0E6;
-  --color-on-tertiary: #ffffff;
-  --color-tertiary: #8A8471;
-  --color-background: #FDFBF7;
-  --color-on-secondary: #ffffff;
-  --color-surface: #FDFBF7;
-  --color-natural-sage: #5A5A40;
-  --color-natural-border: #E6E2D3;
-  --color-natural-muted: #8A8471;
-  --color-natural-chip: #E6EBDD;
+/* Tailwind v4 needs an explicit custom variant for class-based dark mode. */
+@custom-variant dark (&:where(.dark, .dark *));
 
-  --font-display: Outfit, system-ui, sans-serif;
-  --font-body: Inter, system-ui, sans-serif;
+/*
+ * `static` is required: Tailwind v4 tree-shakes unused theme variables out of
+ * :root. A var dropped from :root but overridden in `.dark` makes dark mode
+ * silently half-work.
+ */
+@theme static {
+  --font-display: "Lora", Georgia, "Times New Roman", serif;
+  --font-body: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* ---- surfaces ---- */
+  --color-canvas: #f8f5f0;
+  --color-surface: #f2ede4;
+  --color-card: #ffffff;
+  --color-raised: #ffffff;
+  --color-overlay: rgb(248 245 240 / 0.88);
+
+  /* ---- lines ---- */
+  --color-line: #e1dcd3;
+  --color-line-strong: #d2cabc;
+
+  /*
+   * ---- extended palette ----
+   * sage green (brand/accent) and sage beige (canvas/surface) already carry the
+   * identity. These two add range without competing with them:
+   *
+   *   slate — greyish blue. Cool, recessive, informational. Steps, meta, the
+   *           observational half of a note. Never used for anything actionable.
+   *   clay  — terracotta. Warm, human, used sparingly for the live/attention
+   *           moments. Distinct from `danger`, which stays reserved for errors.
+   *
+   * `-ink` variants are the AA-safe text colour; the base is a fill.
+   */
+  --color-slate: #4f6273;
+  --color-slate-soft: #e3e8ed;
+  --color-slate-ink: #2c3c4b;
+
+  --color-clay: #c06c57;
+  --color-clay-soft: #f8ece8;
+  --color-clay-ink: #8e3e2b;
+  --color-clay-border: #eaccc3;
+  --color-accent-border: #c5d5c3;
+
+  /* ---- text ---- */
+  --color-ink: #2b2927;
+  --color-ink-muted: #7c7872;
+  --color-ink-subtle: #8e8981;
+
+  /*
+   * brand = fills only (needs 3:1 as a UI component).
+   * accent = sage text + small icons (needs 4.5:1). #738872 on white is 3.82:1,
+   * which is why every small sage label in the old markup failed AA.
+   */
+  --color-brand: #738872;
+  --color-brand-hover: #586b57;
+  --color-on-brand: #ffffff;
+  --color-accent: #394b38;
+  --color-accent-soft: #dfe7de;
+  --color-accent-ink: #394b38;
+
+  /* ---- status ---- */
+  --color-ok: #2f6b4f;
+  --color-ok-soft: #e1efe7;
+  --color-warn: #8a5a16;
+  --color-warn-soft: #f7ecd9;
+  --color-danger: #a85743;
+  --color-danger-soft: #f8ece8;
+  --color-rec: #c0392b;
+
+  --color-focus: #3f5a45;
+
+  /* ---- radii ---- */
+  --radius-control: 0.75rem;
+  --radius-field: 0.75rem;
+  --radius-panel: 1rem;
+  --radius-card: 1.25rem;
+
+  /* ---- elevation ---- */
+  --shadow-e1: 0 1px 2px rgb(43 41 39 / 0.04), 0 1px 3px rgb(43 41 39 / 0.06);
+  --shadow-e2: 0 2px 4px -2px rgb(43 41 39 / 0.06), 0 10px 24px -8px rgb(43 41 39 / 0.1);
+  --shadow-e3: 0 8px 16px -8px rgb(43 41 39 / 0.1), 0 32px 64px -24px rgb(43 41 39 / 0.24);
+
+  /* ---- type scale ---- */
+  /*
+   * Numeric scale from the design system. The semantic names below
+   * (overline/body/title/display-*) are what components use; these exist so a
+   * one-off can reach for an exact step without inventing an arbitrary size.
+   */
+  --text-3xs: 0.625rem;   /* 10 */
+  --text-2xs: 0.6875rem;  /* 11 */
+  --text-xs: 0.75rem;     /* 12 */
+  --text-sm: 0.875rem;    /* 14 */
+  --text-base: 1rem;      /* 16 */
+  --text-lg: 1.125rem;    /* 18 */
+  --text-xl: 1.25rem;     /* 20 */
+  --text-2xl: 1.5rem;     /* 24 */
+  --text-4xl: 2.25rem;    /* 36 */
+  --text-5xl: 3rem;       /* 48 */
+  --text-6xl: 3.75rem;    /* 60 */
+
+  --text-overline: 0.6875rem;
+  --text-overline--line-height: 1.4;
+  --text-overline--letter-spacing: 0.09em;
+  --text-overline--font-weight: 700;
+
+  --text-body-sm: 0.875rem;
+  --text-body-sm--line-height: 1.6;
+
+  --text-body: 1rem;
+  --text-body--line-height: 1.65;
+
+  --text-title: 1.125rem;
+  --text-title--line-height: 1.4;
+
+  --text-display-md: 1.5rem;
+  --text-display-md--line-height: 1.2;
+  --text-display-md--letter-spacing: -0.01em;
+
+  --text-display-lg: 2.25rem;
+  --text-display-lg--line-height: 1.15;
+  --text-display-lg--letter-spacing: -0.015em;
+
+  --text-display-xl: 3rem;
+  --text-display-xl--line-height: 1.05;
+  --text-display-xl--letter-spacing: -0.02em;
+
+  /* ---- motion ---- */
+  --ease-cinematic: cubic-bezier(0.22, 1, 0.36, 1);
+  --animate-breathe: breathe 6s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  --animate-drift: drift 22s linear infinite;
+  --animate-halo: drift 1.4s linear infinite;
+  --animate-halo-slow: drift-reverse 2.6s linear infinite;
+
+  @keyframes breathe {
+    0%,
+    100% {
+      transform: scale(1);
+      opacity: 0.45;
+    }
+    50% {
+      transform: scale(1.045);
+      opacity: 0.75;
+    }
+  }
+
+  @keyframes drift {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes drift-reverse {
+    to {
+      transform: rotate(-360deg);
+    }
+  }
+
+  @keyframes pulse-bar {
+    0%,
+    100% {
+      transform: scaleY(0.18);
+    }
+    50% {
+      transform: scaleY(1);
+    }
+  }
 }
 
-/* Base offline fallback styling */
-body {
-  background-color: #FDFBF7;
-  color: #33322E;
-  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-  margin: 0;
-  padding: 0;
+/*
+ * Dark overrides live OUTSIDE any @layer. @theme output lands in `@layer theme`,
+ * and unlayered rules always beat layered ones regardless of specificity.
+ */
+.dark {
+  --color-canvas: #131614;
+  --color-surface: #1a1e1a;
+  --color-card: #1f2420;
+  --color-raised: #262b26;
+  --color-overlay: rgb(19 22 20 / 0.88);
+
+  --color-line: #333a34;
+  --color-line-strong: #444c45;
+
+  /* Extended palette — dark. Both halves are mandatory: a variable dropped from
+     :root but overridden here makes dark mode silently half-work. */
+  --color-slate: #9db2c2;
+  --color-slate-soft: #222d36;
+  --color-slate-ink: #c3d4e0;
+
+  --color-clay: #d98b73;
+  --color-clay-soft: #33201b;
+  --color-clay-ink: #eeb4a0;
+  --color-clay-border: #4a2f26;
+  --color-accent-border: #3c4d3b;
+
+  --color-ink: #edeae3;
+  --color-ink-muted: #aba79e;
+  --color-ink-subtle: #85817a;
+
+  --color-brand: #6f8a6e;
+  --color-brand-hover: #85a183;
+  --color-on-brand: #10130f;
+  --color-accent: #96af94;
+  --color-accent-soft: #232e24;
+  --color-accent-ink: #c3d6c0;
+
+  --color-ok: #7fc3a2;
+  --color-ok-soft: #17291f;
+  --color-warn: #e0ae5e;
+  --color-warn-soft: #2e2414;
+  --color-danger: #e08d77;
+  --color-danger-soft: #33201b;
+  --color-rec: #f08a7a;
+
+  --color-focus: #a9c1a6;
+
+  /* Drop shadows barely read on dark; lean on a hairline ring instead. */
+  --shadow-e1: 0 0 0 1px rgb(255 255 255 / 0.03);
+  --shadow-e2: 0 0 0 1px rgb(255 255 255 / 0.04), 0 12px 28px -12px rgb(0 0 0 / 0.65);
+  --shadow-e3: 0 0 0 1px rgb(255 255 255 / 0.05), 0 32px 72px -24px rgb(0 0 0 / 0.8);
 }
 
-.material-symbols-outlined {
-  font-family: 'Material Symbols Outlined', system-ui, -apple-system, sans-serif;
-  font-weight: normal;
-  font-style: normal;
-  font-size: 24px;
-  line-height: 1;
-  letter-spacing: normal;
-  text-transform: none;
-  display: inline-block;
-  white-space: nowrap;
-  word-wrap: normal;
-  direction: ltr;
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-  font-feature-settings: 'liga';
-  vertical-align: middle;
+@layer base {
+  html {
+    color-scheme: light;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  ::selection {
+    background: var(--color-accent-soft);
+    color: var(--color-accent-ink);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
-.cinematic-transition {
-  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+@layer components {
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-strong) transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 10px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: var(--color-line-strong);
+    border-radius: 9999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+
+  /*
+   * Inline SVG icons are sized by the `size-*` utility on the <svg> itself;
+   * these are the shared lucide stroke defaults so every glyph matches.
+   */
+  .icon {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex-shrink: 0;
+  }
+
+  /*
+   * Screens are toggled by app.js rather than unmounted, so the flex/blocked
+   * layout each one wants lives here instead of being forced by the navigator.
+   */
+  .screen[hidden] {
+    display: none !important;
+  }
 }
 
-.orb-hover:hover {
-  transform: scale(1.02);
-}
-
+/*
+ * Waveform bars: the synthetic (no-mic) animation. A live stream overrides
+ * `transform` per frame from JS, which wins over the animation only while it
+ * is running — so the class is removed rather than fought with.
+ */
 .waveform-bar {
-  animation: waveform 1.2s ease-in-out infinite;
+  animation: pulse-bar var(--bar-duration, 1s) ease-in-out var(--bar-delay, 0ms) infinite;
 }
 
-@keyframes waveform {
-  0%, 100% { height: 8px; }
-  50% { height: 28px; }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
 }
-
-.active-selection {
-  border-color: #5A5A40 !important;
-  background-color: #F3F0E6 !important;
-}
-
-/* Ensure hidden screens remain strictly hidden regardless of layout engine */
-.hidden {
-  display: none !important;
-}
-
