@@ -1,11 +1,11 @@
-# HushNote 🛡️
+# HushNote
 > Privacy-First Local-First AI Note Drafting Assistant for Therapists
 
 HushNote is a local-first, privacy-focused clinical note drafting prototype designed to help mental health professionals draft structured DAP and SOAP notes from session audio snippets without compromising client confidentiality or storing raw audio data permanently.
 
 ---
 
-## 🚀 Key Features & Privacy Architecture
+## Key Features & Privacy Architecture
 
 - **Local-First LLM Processing**: Interacts directly with a local **Ollama** instance running Gemma (`gemma2` or `gemma:2b`).
 - **Zero Raw Data Retention**: Raw audio snippets and transcripts reside solely in temporary client/server memory buffers and are **permanently purged** immediately upon note approval.
@@ -18,7 +18,7 @@ HushNote is a local-first, privacy-focused clinical note drafting prototype desi
 
 ---
 
-## 🛠️ Prerequisites
+## Prerequisites
 
 1. **Node.js**: v18.0.0 or later
 2. **Ollama**: Download and install from [Ollama.com](https://ollama.com)
@@ -31,7 +31,7 @@ HushNote is a local-first, privacy-focused clinical note drafting prototype desi
 
 ---
 
-## 💻 Quick Start & Running Locally
+## Quick Start & Running Locally
 
 1. **Clone the repository and install dependencies**:
    ```bash
@@ -66,7 +66,7 @@ HushNote is a local-first, privacy-focused clinical note drafting prototype desi
 
 ---
 
-## 🔌 Connecting Google Stitch Exported HTML/CSS to `app.js`
+## Connecting Google Stitch Exported HTML/CSS to `app.js`
 
 `app.js` is engineered to seamlessly bind state and event listeners to standard Stitch-exported HTML components. To connect your exported Stitch UI screens:
 
@@ -98,7 +98,7 @@ HushNote is a local-first, privacy-focused clinical note drafting prototype desi
 
 ---
 
-## 📂 Project Structure
+## Project Structure
 
 ```
 .
@@ -114,7 +114,7 @@ HushNote is a local-first, privacy-focused clinical note drafting prototype desi
 
 ---
 
-## 🔐 HIPAA & Security Compliance Integration Guidance
+## HIPAA & Security Compliance Integration Guidance
 
 For production healthcare deployment:
 
