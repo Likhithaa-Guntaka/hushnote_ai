@@ -43,7 +43,10 @@ Client: It usually starts right as I'm getting ready for work in the morning...`
   selectedFormat: 'DAP', // 'DAP', 'SOAP', 'BOTH'
   selectedPurpose: 'progress', // 'progress', 'billing', 'insurance'
   generatedNoteResponse: null,
-  isProcessing: false
+  isProcessing: false,
+  // True when no model was reachable, so no note was drafted at all.
+  // Gates the review screen's primary action — see applyFallbackGate().
+  isFallback: false
 };
 
 // DOM Element Registry
@@ -773,6 +776,7 @@ const ICON = {
   circleCheck: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
   triangleAlert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
   chevronDown: '<path d="m6 9 6 6 6-6"/>',
+  fileX: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="m14.5 12.5-5 5"/><path d="m9.5 12.5 5 5"/>',
 };
 
 /** `size` is a Tailwind size-* step; `tone` a text-* colour utility. */
@@ -813,11 +817,148 @@ function disclosure(summary, body) {
     </details>`;
 }
 
+/* ------------------------------------------------------------------ *
+ * Model-unavailable handling
+ * ------------------------------------------------------------------ */
+
+const APPROVE_ICON =
+  '<svg class="icon size-[18px]" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/></svg>';
+const DISCARD_ICON =
+  '<svg class="icon size-[18px]" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+
+const APPROVE_HTML = `${APPROVE_ICON}<span>Approve &amp; Wipe Raw Data</span>`;
+const DISCARD_HTML = `${DISCARD_ICON}<span>Wipe raw session data</span>`;
+
+const ACTION_BASE = 'inline-flex min-h-12 items-center justify-center gap-2 rounded-control px-6 py-3 font-display text-body font-semibold shadow-e1 transition-[background-color,transform] duration-200 ease-cinematic active:scale-[0.985] disabled:cursor-not-allowed disabled:bg-surface disabled:text-ink-subtle disabled:shadow-none';
+const ACTION_APPROVE = `${ACTION_BASE} bg-brand text-on-brand hover:bg-brand-hover`;
+// Clay, not danger: danger is reserved for errors, and this is an attention
+// moment. It must not read as the same safe green primary as a real approval.
+const ACTION_DISCARD = `${ACTION_BASE} border border-clay-border bg-clay-soft text-clay-ink hover:bg-clay-border`;
+
+/**
+ * The offline notice.
+ *
+ * The server returns empty sections when no model ran. This says why, states
+ * plainly that nothing was generated, and gives the one action that fixes it.
+ * It is the only place that instruction appears — the panel empty states below
+ * report status only, so the fix is not repeated three times.
+ */
+function renderFallbackNotice(data) {
+  const container = document.getElementById('fallbackNotice');
+  if (!container) return;
+
+  if (!data || !data.fallback) {
+    container.innerHTML = '';
+    container.hidden = true;
+    return;
+  }
+
+  container.hidden = false;
+  container.innerHTML = `
+    <div role="alert" class="flex items-start gap-3.5 rounded-card border border-danger bg-danger-soft p-5">
+      ${icon('triangleAlert', 5, 'mt-0.5 shrink-0 text-danger')}
+      <div class="space-y-2">
+        <p class="font-display text-title font-semibold text-danger">No note could be drafted</p>
+        <p class="text-body-sm leading-relaxed text-ink">
+          ${escapeHtml(data.fallbackReason || 'The local model could not be reached.')}
+          <strong class="font-semibold">Nothing on this screen was generated from your session.</strong>
+        </p>
+        <p class="text-body-sm leading-relaxed text-ink-muted">
+          Your transcript is unchanged. Start Ollama, then go back and draft again.
+        </p>
+      </div>
+    </div>`;
+}
+
+/**
+ * In fallback mode there is nothing to approve, so the primary action changes
+ * identity rather than being disabled outright: POST /api/delete-raw-session is
+ * the only path that clears activeRawSession on the server, and blocking it
+ * would strand the raw transcript in memory — the opposite of the promise.
+ */
+function applyFallbackGate(isFallback) {
+  state.isFallback = Boolean(isFallback);
+
+  const btn = elements.approveDeleteBtn;
+  if (!btn) return;
+
+  btn.disabled = false;
+  btn.className = state.isFallback ? ACTION_DISCARD : ACTION_APPROVE;
+  btn.innerHTML = state.isFallback ? DISCARD_HTML : APPROVE_HTML;
+}
+
+/** The success overlay claims a note was kept. On a discard, nothing was. */
+function paintSuccessCopy(discardOnly) {
+  const title = document.getElementById('success-title');
+  const sub = document.getElementById('success-sub');
+  if (title) title.textContent = discardOnly ? 'Nothing was kept' : 'The note is yours';
+  if (sub) {
+    sub.textContent = discardOnly
+      ? 'No note was drafted, and the raw data is gone.'
+      : 'Everything else is gone.';
+  }
+}
+
+/**
+ * The review panels when no note was drafted.
+ *
+ * The normal renderers cannot be reused with empty data: an empty
+ * missing-fields list paints a green "Nothing outstanding", which would read as
+ * a clean bill of health on a note that does not exist. Each panel gets an
+ * explicit empty state instead.
+ */
+function renderUnavailableReview() {
+  if (elements.noteBody) {
+    elements.noteBody.innerHTML = `
+      <div class="flex flex-col items-center gap-3 rounded-panel border border-dashed border-line-strong bg-surface px-6 py-10 text-center">
+        ${icon('fileX', 7, 'text-ink-subtle')}
+        <div class="space-y-1.5">
+          <p class="font-display text-title font-semibold text-ink">No note was drafted</p>
+          <p class="mx-auto max-w-[28rem] text-body-sm leading-relaxed text-ink-muted">
+            HushNote will not write clinical content without a model.
+          </p>
+        </div>
+      </div>`;
+  }
+
+  // The "Editable" badge labels content that isn't there.
+  const editableBadge = document.getElementById('noteEditableBadge');
+  if (editableBadge) editableBadge.hidden = true;
+
+  if (elements.evidenceChips) {
+    elements.evidenceChips.innerHTML =
+      '<p class="font-display text-body-sm italic text-ink-subtle">Evidence quotes are linked once a note is drafted.</p>';
+  }
+
+  if (elements.readinessLabel) {
+    elements.readinessLabel.textContent = 'Not drafted';
+    elements.readinessLabel.className =
+      'inline-flex items-center rounded-full border border-line bg-surface px-3 py-1 text-overline uppercase text-ink-muted';
+  }
+
+  if (elements.missingFields) {
+    elements.missingFields.innerHTML =
+      '<p class="text-body-sm leading-relaxed text-ink-muted">Readiness, billing codes and audit checks are assessed only against a drafted note.</p>';
+  }
+}
+
 /**
  * Render Review Screen with editable note fields, readiness check, and evidence chips
  */
 function renderReviewScreen(data) {
   const { note = {}, evidence = [], missing_fields = [], readiness = {} } = data;
+
+  // 0. Provenance first — everything below is only trustworthy if a model ran.
+  renderFallbackNotice(data);
+  applyFallbackGate(data.fallback);
+
+  if (data.fallback) {
+    renderUnavailableReview();
+    return;
+  }
+
+  const editableBadge = document.getElementById('noteEditableBadge');
+  if (editableBadge) editableBadge.hidden = false;
 
   // 1. Note fields — SOAP carries an extra Objective section.
   if (elements.noteBody) {
@@ -962,11 +1103,25 @@ function renderReviewScreen(data) {
  * Approve Note & Purge Raw Data
  */
 async function executeApproveAndDelete() {
+  // Captured up front: the purge clears state, and the error path below needs
+  // to restore the button to whichever identity it started with.
+  const discardOnly = state.isFallback;
+
+  /*
+   * Discarding is destructive and no longer reads as "save my work", so it
+   * confirms. An approval does not — the button already says what it does.
+   */
+  if (discardOnly && !window.confirm(
+    'Wipe the raw audio and transcript?\n\nNo note was drafted, so nothing will be kept.'
+  )) {
+    return;
+  }
+
   if (elements.approveDeleteBtn) {
     elements.approveDeleteBtn.disabled = true;
     elements.approveDeleteBtn.innerHTML =
       '<svg class="icon size-4 animate-spin" viewBox="0 0 24 24" aria-hidden="true">'
-      + '<path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg><span>Purging raw data…</span>';
+      + `<path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg><span>${discardOnly ? 'Discarding…' : 'Purging raw data…'}</span>`;
   }
 
   try {
@@ -990,6 +1145,8 @@ async function executeApproveAndDelete() {
     state.transcript = '';
     state.consentGiven = false;
 
+    paintSuccessCopy(discardOnly);
+
     setTimeout(() => {
       showScreen('success-screen');
     }, 600);
@@ -999,7 +1156,7 @@ async function executeApproveAndDelete() {
     alert('Failed to delete raw session data from backend server.');
     if (elements.approveDeleteBtn) {
       elements.approveDeleteBtn.disabled = false;
-      elements.approveDeleteBtn.innerHTML = '<svg class="icon size-[18px]" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/></svg><span>Approve &amp; Wipe Raw Data</span>';
+      elements.approveDeleteBtn.innerHTML = discardOnly ? DISCARD_HTML : APPROVE_HTML;
     }
   }
 }
@@ -1015,6 +1172,11 @@ function resetSessionState() {
   if (state.audioUrl) URL.revokeObjectURL(state.audioUrl);
   state.audioUrl = null;
   state.generatedNoteResponse = null;
+
+  // Clears the offline notice and returns the primary action to "Approve",
+  // enabled — executeApproveAndDelete() leaves it disabled and mid-spinner.
+  renderFallbackNotice(null);
+  applyFallbackGate(false);
 
   if (elements.consentCheckbox) elements.consentCheckbox.checked = false;
   applyConsentState();

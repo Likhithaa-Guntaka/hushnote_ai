@@ -131,80 +131,47 @@ function calculateReadiness(purpose: string, note: any, evidence: any[]) {
   }
 }
 
-// Fallback intelligent note generator when external model endpoints are unreachable
-function generateFallbackNote(transcript: string, format: string, purpose: string) {
-  const lines = transcript.split('\n').filter(l => l.trim().length > 0);
-  const text = transcript.toLowerCase();
-
-  // Extract key quotes and timestamps dynamically from transcript
-  const evidence: Array<{ quote: string; timestamp: string; section: string }> = [];
-  
-  for (const line of lines) {
-    const timeMatch = line.match(/\[(\d{2}:\d{2})\]/);
-    const ts = timeMatch ? timeMatch[1] : '00:00';
-    const cleanLine = line.replace(/\[\d{2}:\d{2}\]/, '').trim();
-
-    if (cleanLine.toLowerCase().includes('client:') || cleanLine.toLowerCase().startsWith('client')) {
-      const content = cleanLine.replace(/^client:\s*/i, '').trim();
-      if (content.length > 12 && evidence.length < 6) {
-        evidence.push({
-          quote: content.length > 110 ? content.slice(0, 107) + '...' : content,
-          timestamp: ts,
-          section: evidence.length % 2 === 0 ? 'subjective' : 'data'
-        });
-      }
-    }
-  }
-
-  if (evidence.length === 0) {
-    evidence.push({
-      quote: lines[0] ? lines[0].slice(0, 80) : "Session transcript discussed with therapist",
-      timestamp: "00:00",
-      section: "data"
-    });
-  }
-
-  const noteData = {
-    data: [
-      "Client reported experiencing heightened somatic symptoms of anxiety, specifically chest tightness and morning restlessness.",
-      "Identified workplace preparation routine and deadline pressures as primary environmental triggers.",
-      "Client participated actively in exploring cognitive reframing techniques and diaphragmatic breathing."
-    ],
-    subjective: [
-      "Client states: 'My anxiety has been through the roof, especially in the mornings... chest tightness won't go away.'",
-      "Reports anxiety onset coincides with morning preparation for work transitions."
-    ],
-    objective: [
-      "Client appeared attentive, cooperative, with mild psychomotor agitation noted during discussion of work stress.",
-      "Affect was congruent with reported anxious mood. Thought processes logical and goal-directed."
-    ],
-    assessment: [
-      "Symptoms consistent with Generalized Anxiety Disorder flare-up related to workplace stress.",
-      "Client demonstrates good clinical insight and willingness to utilize cognitive reframing strategies."
-    ],
-    plan: [
-      "Continue weekly CBT focusing on cognitive reframing and diaphragmatic breathing.",
-      "Homework: Practice 5-minute morning grounding exercise prior to work commute.",
-      "Next session scheduled in 7 days."
-    ]
-  };
-
-  const missing_fields: string[] = [];
-  if (!text.includes('medication') && !text.includes('meds')) {
-    missing_fields.push('Medication adherence: Not documented');
-  }
-  if (!text.includes('risk') && !text.includes('harm') && !text.includes('suicide')) {
-    missing_fields.push('Safety / Risk assessment: Not documented in session snippet');
-  }
-
-  const readiness = calculateReadiness(purpose, noteData, evidence);
-
+/**
+ * The response when no model produced a note.
+ *
+ * This returns NO clinical content, deliberately. An earlier version of this
+ * function returned fixed prose about anxiety and chest tightness regardless of
+ * what the transcript said, and once rendered it was indistinguishable from a
+ * real draft — the precise failure a clinical tool must not have. Empty sections
+ * plus an explicit unavailable state is the only honest answer.
+ *
+ * Two things are deliberately NOT done here:
+ *
+ *  1. calculateReadiness() is not called. It asserts "Session Duration Verified
+ *     via Transcript", "Medical Necessity Justification Linkage" and recommends
+ *     a CPT code — none of which can be true when nothing was drafted.
+ *  2. No evidence quotes are extracted. Pulling real quotes out of the
+ *     transcript would be accurate but misleading: it implies the session was
+ *     analysed and a note was grounded in it, when neither happened.
+ *
+ * The transcript itself is untouched and still held in activeRawSession, so the
+ * therapist loses nothing by drafting again once the model is up.
+ */
+function buildUnavailableResponse(format: string, purpose: string) {
   return {
     format,
-    note: noteData,
-    evidence,
-    missing_fields,
-    readiness
+    purpose,
+    note: {
+      data: [],
+      subjective: [],
+      objective: [],
+      assessment: [],
+      plan: []
+    },
+    evidence: [],
+    missing_fields: [],
+    readiness: {
+      completed: false,
+      unavailable: true,
+      label: 'Not drafted — model unavailable',
+      checksPassed: [],
+      missing: []
+    }
   };
 }
 
@@ -262,11 +229,14 @@ Return a JSON object with this EXACT structure:
 
     let resultJson: any = null;
     let aiSource = 'ollama_gemma';
+    // Why the local model produced nothing. This is not diagnostics — the client
+    // shows it to the therapist to explain why no note could be drafted.
+    let ollamaError: string | null = null;
 
     // Local-only Ollama generation (gemma4 by default)
     const ollamaBaseUrl = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
+    const modelName = model || process.env.OLLAMA_MODEL || 'gemma4';
     if (!resultJson && ollamaBaseUrl) {
-      const modelName = model || process.env.OLLAMA_MODEL || 'gemma4';
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout for local model generation
@@ -299,9 +269,16 @@ Return a JSON object with this EXACT structure:
               }
             }
           }
+          if (!resultJson) {
+            ollamaError = `the model "${modelName}" returned no usable JSON`;
+          }
+        } else {
+          ollamaError = `the model server replied ${ollamaResponse.status} — check that "${modelName}" has been pulled`;
         }
       } catch (ollamaErr: any) {
-        // Gracefully ignore local network timeouts
+        ollamaError = ollamaErr?.name === 'AbortError'
+          ? 'the local model did not respond within 60 seconds'
+          : `the local model could not be reached (${ollamaErr?.message || 'unknown error'})`;
       }
     }
 
@@ -310,15 +287,22 @@ Return a JSON object with this EXACT structure:
       const readiness = calculateReadiness(purpose, resultJson.note, resultJson.evidence || []);
       resultJson.readiness = readiness;
       resultJson.purpose = purpose;
-      return res.json({ success: true, source: aiSource, ...resultJson });
+      // Trust fields go LAST: model output must not be able to claim its own provenance.
+      return res.json({ ...resultJson, success: true, source: aiSource, fallback: false, model: modelName });
     }
 
-    // Otherwise use intelligent structured local fallback note generator
-    const fallback = generateFallbackNote(transcript, format, purpose);
+    /*
+     * No model output. The response carries empty sections and an explicit
+     * unavailable state — never invented content — and must not be attributable
+     * to the drafting engine. `fallback: true` is what the client gates on;
+     * `source` is deliberately not an engine name.
+     */
     return res.json({
+      ...buildUnavailableResponse(format, purpose),
       success: true,
-      source: 'local_gemma_engine',
-      ...fallback
+      source: 'fallback_offline',
+      fallback: true,
+      fallbackReason: `HushNote could not draft this note because ${ollamaError || `no local model was reachable at ${ollamaBaseUrl}`}.`
     });
 
   } catch (error: any) {
