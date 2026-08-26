@@ -732,7 +732,11 @@ async function executeNoteGeneration() {
   const payload = {
     transcript: currentTranscript,
     format: state.selectedFormat,
-    purpose: state.selectedPurpose
+    purpose: state.selectedPurpose,
+    // Measured wall-clock from the recording timer. This is the only reliable
+    // duration signal for a live session — a live speech transcript carries no
+    // timestamps — and the server needs it to suggest a time-based CPT code.
+    durationSeconds: state.recordingSeconds
   };
 
   try {
@@ -1042,6 +1046,16 @@ function renderReviewScreen(data) {
           <dd class="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-body-sm text-ink">
             <span class="rounded-md bg-accent-soft px-1.5 py-0.5 font-mono text-2xs font-semibold text-accent-ink">${escapeHtml(readiness.suggestedCpt.code)}</span>
             <span>${escapeHtml(readiness.suggestedCpt.title)}</span>
+          </dd>
+        </div>`);
+    } else if (readiness.cptUnavailableReason) {
+      // Saying nothing here would read as "no billing concerns". Name the gap.
+      facts.push(`
+        <div class="space-y-1">
+          <dt class="text-overline uppercase text-ink-muted">Suggested code</dt>
+          <dd class="space-y-1 text-body-sm text-ink">
+            <span class="block font-semibold text-warn">Not determined</span>
+            <span class="block leading-snug text-ink-muted">${escapeHtml(readiness.cptUnavailableReason)}</span>
           </dd>
         </div>`);
     }
