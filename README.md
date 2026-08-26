@@ -7,7 +7,7 @@ HushNote is a local-first, privacy-focused clinical note drafting prototype desi
 
 ## Key Features & Privacy Architecture
 
-- **Local-First LLM Processing**: Interacts directly with a local **Ollama** instance running Gemma (`gemma2` or `gemma:2b`).
+- **Local-First LLM Processing**: Interacts directly with a local **Ollama** instance running Gemma (`gemma4` by default; override with `OLLAMA_MODEL`).
 - **Zero Raw Data Retention**: Raw audio snippets and transcripts reside solely in temporary client/server memory buffers and are **permanently purged** immediately upon note approval.
 - **Timestamped Evidence Quotes**: Links specific transcript quotes with exact time markers (`00:12`, `00:41`) to ground generated notes in factual session evidence.
 - **Adaptive Purpose Readiness**:
@@ -24,10 +24,10 @@ HushNote is a local-first, privacy-focused clinical note drafting prototype desi
 2. **Ollama**: Download and install from [Ollama.com](https://ollama.com)
 3. **Gemma Model**:
    ```bash
-   ollama pull gemma2
-   # or
-   ollama pull gemma
+   ollama pull gemma4
    ```
+   To use a different tag, set `OLLAMA_MODEL` in `.env` to match whatever
+   `ollama list` reports.
 
 ---
 
@@ -48,8 +48,8 @@ HushNote is a local-first, privacy-focused clinical note drafting prototype desi
    *Default configuration:*
    ```env
    PORT=3000
-   OLLAMA_BASE_URL="http://localhost:11434"
-   OLLAMA_MODEL="gemma2"
+   OLLAMA_BASE_URL="http://127.0.0.1:11434"
+   OLLAMA_MODEL="gemma4"
    ```
 
 3. **Start the Local Ollama Model**:
