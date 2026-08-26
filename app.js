@@ -43,6 +43,15 @@ Client: It usually starts right as I'm getting ready for work in the morning...`
   selectedFormat: 'DAP', // 'DAP', 'SOAP', 'BOTH'
   selectedPurpose: 'progress', // 'progress', 'billing', 'insurance'
   generatedNoteResponse: null,
+  // Review-screen edits, keyed by note section ('data', 'subjective', ...).
+  // noteOriginals holds what the model drafted, so an edit that is typed and
+  // then undone stops counting as an edit. noteEdits holds the raw textarea
+  // string rather than a split array, so typing a blank line is not eaten
+  // mid-keystroke — getFinalNote() does the splitting.
+  noteOriginals: {},
+  noteEdits: {},
+  // The edited note, captured at approval, before the raw data is wiped.
+  approvedNote: null,
   isProcessing: false,
   // True when no model was reachable, so no note was drafted at all.
   // Gates the review screen's primary action — see applyFallbackGate().
@@ -162,6 +171,26 @@ function bindEventListeners() {
   if (elements.transcriptInput && elements.transcriptInput.tagName === 'TEXTAREA') {
     elements.transcriptInput.addEventListener('input', (e) => {
       state.transcript = e.target.value;
+    });
+  }
+
+  /*
+   * Note-section editing. Delegated from the container rather than bound per
+   * textarea, because renderReviewScreen() replaces noteBody's innerHTML and
+   * per-element listeners would be discarded with it.
+   *
+   * `input` rather than `blur`, to match how transcriptInput above already
+   * syncs, and so the "Edited" marker appears as the clinician types instead of
+   * waiting for focus to leave. Only the marker is toggled here — re-rendering
+   * the section on every keystroke would destroy the caret.
+   */
+  if (elements.noteBody) {
+    elements.noteBody.addEventListener('input', (e) => {
+      const field = e.target.closest('[data-note-key]');
+      if (!field) return;
+
+      state.noteEdits[field.dataset.noteKey] = field.value;
+      paintEditedFlag(field.dataset.noteKey);
     });
   }
 
@@ -756,6 +785,11 @@ async function executeNoteGeneration() {
     console.log('[HushNote Client] Received note generation response:', data);
 
     state.generatedNoteResponse = data;
+    // A new draft replaces the old one, so edits to the previous draft must not
+    // carry over into it.
+    state.noteOriginals = {};
+    state.noteEdits = {};
+    state.approvedNote = null;
 
     // Small delay to allow the loading animation to feel organic
     setTimeout(() => {
@@ -797,13 +831,62 @@ function escapeHtml(value) {
 }
 
 /** One labelled, editable section of the note. */
-function noteField(label, lines) {
+function noteField(label, key, lines, placeholder = '') {
+  const original = lines.join('\n');
+  state.noteOriginals[key] = original;
+
+  // A re-render must not throw away what the clinician typed, so an existing
+  // edit wins over the drafted text.
+  const current = Object.prototype.hasOwnProperty.call(state.noteEdits, key)
+    ? state.noteEdits[key]
+    : original;
+
   return `
     <div class="space-y-1.5">
-      <label class="block text-overline uppercase text-accent">${label}</label>
-      <textarea rows="4"
-        class="custom-scrollbar w-full resize-y rounded-field border border-line bg-surface p-3.5 text-body-sm leading-relaxed text-ink transition-colors duration-200 focus:border-line-strong focus:outline-none">${escapeHtml(lines.join('\n'))}</textarea>
+      <div class="flex items-center justify-between gap-2">
+        <label for="note-${key}" class="block text-overline uppercase text-accent">${label}</label>
+        <span id="note-edited-${key}" class="inline-flex items-center gap-1.5 text-overline uppercase text-clay-ink"${current === original ? ' hidden' : ''}>
+          <span aria-hidden="true" class="size-1.5 shrink-0 rounded-full bg-clay"></span>
+          <span>Edited</span>
+        </span>
+      </div>
+      <textarea id="note-${key}" name="note-${key}" data-note-key="${key}" rows="4"${placeholder ? ` placeholder="${escapeHtml(placeholder)}"` : ''}
+        class="custom-scrollbar w-full resize-y rounded-field border border-line bg-surface p-3.5 text-body-sm leading-relaxed text-ink transition-colors duration-200 placeholder:text-ink-subtle focus:border-line-strong focus:outline-none">${escapeHtml(current)}</textarea>
     </div>`;
+}
+
+/** Shows the "Edited" marker only while a section differs from the draft. */
+function paintEditedFlag(key) {
+  const flag = document.getElementById(`note-edited-${key}`);
+  if (!flag) return;
+
+  const original = state.noteOriginals[key] ?? '';
+  const current = Object.prototype.hasOwnProperty.call(state.noteEdits, key)
+    ? state.noteEdits[key]
+    : original;
+
+  flag.hidden = current === original;
+}
+
+/**
+ * The note as it now stands — the clinician's edits over the drafted text.
+ *
+ * This is the accessor anything downstream should use. Reading the response
+ * object directly returns what the model wrote, not what the clinician
+ * approved, which is how edits used to get silently dropped.
+ */
+function getFinalNote() {
+  const base = (state.generatedNoteResponse && state.generatedNoteResponse.note) || {};
+  const merged = { ...base };
+
+  for (const [key, raw] of Object.entries(state.noteEdits)) {
+    merged[key] = raw
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean);
+  }
+
+  return merged;
 }
 
 /**
@@ -970,17 +1053,24 @@ function renderReviewScreen(data) {
 
     elements.noteBody.innerHTML = soap
       ? [
-          noteField('Subjective', note.subjective || note.data || []),
-          noteField('Objective', note.objective && note.objective.length
-            ? note.objective
-            : ['Client was attentive and responsive during discussion.']),
-          noteField('Assessment', note.assessment || []),
-          noteField('Plan', note.plan || []),
+          noteField('Subjective', 'subjective', note.subjective || note.data || []),
+          /*
+           * An absent Objective section stays empty. This previously filled in
+           * "Client was attentive and responsive during discussion." — invented
+           * clinical observation, the same failure as the server-side fallback,
+           * just quieter for sitting in a box the clinician assumes was drafted.
+           * The placeholder is a prompt, never a value, so nothing reaches
+           * getFinalNote() unless the clinician actually types it.
+           */
+          noteField('Objective', 'objective', note.objective || [],
+            'No objective observations recorded. Add them here if you observed any.'),
+          noteField('Assessment', 'assessment', note.assessment || []),
+          noteField('Plan', 'plan', note.plan || []),
         ].join('')
       : [
-          noteField('Data', note.data || note.subjective || []),
-          noteField('Assessment', note.assessment || []),
-          noteField('Plan', note.plan || []),
+          noteField('Data', 'data', note.data || note.subjective || []),
+          noteField('Assessment', 'assessment', note.assessment || []),
+          noteField('Plan', 'plan', note.plan || []),
         ].join('');
   }
 
@@ -1150,6 +1240,16 @@ async function executeApproveAndDelete() {
     const resData = await response.json();
     console.log('[HushNote Client] Raw session purged response:', resData);
 
+    /*
+     * Capture the note as the clinician left it BEFORE the raw data goes. This
+     * is the whole point of the review screen: what gets kept is the edited
+     * note, not what the model originally wrote.
+     */
+    if (!discardOnly) {
+      state.approvedNote = getFinalNote();
+      console.log('[HushNote Client] Approved note captured:', state.approvedNote);
+    }
+
     // Clear raw audio and transcript from client memory
     if (state.audioUrl) {
       URL.revokeObjectURL(state.audioUrl);
@@ -1186,6 +1286,9 @@ function resetSessionState() {
   if (state.audioUrl) URL.revokeObjectURL(state.audioUrl);
   state.audioUrl = null;
   state.generatedNoteResponse = null;
+  state.noteOriginals = {};
+  state.noteEdits = {};
+  state.approvedNote = null;
 
   // Clears the offline notice and returns the primary action to "Approve",
   // enabled — executeApproveAndDelete() leaves it disabled and mid-spinner.
@@ -1222,5 +1325,9 @@ window.HushNoteApp = {
   stopAudioRecording,
   executeNoteGeneration,
   executeApproveAndDelete,
-  resetSessionState
+  resetSessionState,
+  renderReviewScreen,
+  // The accessor for the note as edited. Anything reading the note downstream
+  // should come through here rather than at state.generatedNoteResponse.note.
+  getFinalNote
 };
