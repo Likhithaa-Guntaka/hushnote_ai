@@ -37,6 +37,15 @@ interface RawSessionBuffer {
 
 let activeRawSession: RawSessionBuffer | null = null;
 
+/*
+ * Local model defaults, defined once. /api/health previously carried its own
+ * copies ('gemma2', 'localhost:11434') which had drifted from what the
+ * generation path actually used, so health reported a model that would never
+ * be called.
+ */
+const DEFAULT_OLLAMA_BASE_URL = 'http://127.0.0.1:11434';
+const DEFAULT_OLLAMA_MODEL = 'gemma4';
+
 function formatMinutes(minutes: number) {
   return `${Math.round(minutes)} min`;
 }
@@ -48,7 +57,7 @@ function formatMinutes(minutes: number) {
  * minutes of psychotherapy, so an estimate that lands in the wrong band is
  * upcoding or downcoding on a real claim — not a rounding error.
  */
-function deriveSessionDuration(transcript: string, recordedSeconds?: number) {
+function deriveSessionDuration(transcript: string, recordedSeconds?: unknown) {
   // 1. Explicit [MM:SS] markers. The last one is the session's own clock.
   //    Two or more are required: a single marker is a label, not a span.
   const marks = [...transcript.matchAll(/\[(\d{1,2}):([0-5]\d)\]/g)];
@@ -63,8 +72,13 @@ function deriveSessionDuration(transcript: string, recordedSeconds?: number) {
   }
 
   // 2. The client's recording timer — measured wall-clock, not inferred.
-  if (typeof recordedSeconds === 'number' && Number.isFinite(recordedSeconds) && recordedSeconds >= 60) {
-    return { minutes: recordedSeconds / 60, source: 'recorded session length' };
+  //    Coerced rather than type-checked: this arrives straight off a JSON body,
+  //    and a strict typeof rejected "2700" outright, which then reported the
+  //    duration as "not captured" when one had in fact been sent.
+  //    Number(undefined) and Number('abc') are NaN, so those still fall through.
+  const seconds = Number(recordedSeconds);
+  if (Number.isFinite(seconds) && seconds >= 60) {
+    return { minutes: seconds / 60, source: 'recorded session length' };
   }
 
   /*
@@ -129,7 +143,7 @@ function calculateReadiness(
   note: any,
   evidence: any[],
   transcript: string = '',
-  durationSeconds?: number
+  durationSeconds?: unknown
 ) {
   const missing: string[] = [];
   const checksPassed: string[] = [];
@@ -265,7 +279,11 @@ function buildUnavailableResponse(format: string, purpose: string) {
 // POST /api/generate-note
 app.post('/api/generate-note', async (req: Request, res: Response) => {
   try {
-    const { transcript, format = 'DAP', purpose = 'progress', model = 'gemma4', durationSeconds } = req.body;
+    // `model` has no default here on purpose. Defaulting it made it always
+    // truthy, which short-circuited the `|| process.env.OLLAMA_MODEL` below and
+    // left OLLAMA_MODEL dead — health would honour the env var while generation
+    // silently ignored it.
+    const { transcript, format = 'DAP', purpose = 'progress', model, durationSeconds } = req.body;
 
     if (!transcript || typeof transcript !== 'string' || !transcript.trim()) {
       return res.status(400).json({ error: 'Transcript content is required.' });
@@ -320,9 +338,10 @@ Return a JSON object with this EXACT structure:
     // shows it to the therapist to explain why no note could be drafted.
     let ollamaError: string | null = null;
 
-    // Local-only Ollama generation (gemma4 by default)
-    const ollamaBaseUrl = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
-    const modelName = model || process.env.OLLAMA_MODEL || 'gemma4';
+    // Local-only Ollama generation. Request override, then env, then default —
+    // the same order /api/health reports.
+    const ollamaBaseUrl = process.env.OLLAMA_BASE_URL || DEFAULT_OLLAMA_BASE_URL;
+    const modelName = model || process.env.OLLAMA_MODEL || DEFAULT_OLLAMA_MODEL;
     if (!resultJson && ollamaBaseUrl) {
       try {
         const controller = new AbortController();
@@ -427,8 +446,8 @@ app.get('/api/health', (req: Request, res: Response) => {
   res.json({
     status: 'ok',
     appName: 'HushNote',
-    ollamaBaseUrl: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
-    ollamaModel: process.env.OLLAMA_MODEL || 'gemma2',
+    ollamaBaseUrl: process.env.OLLAMA_BASE_URL || DEFAULT_OLLAMA_BASE_URL,
+    ollamaModel: process.env.OLLAMA_MODEL || DEFAULT_OLLAMA_MODEL,
     rawSessionInMemory: !!activeRawSession
   });
 });
