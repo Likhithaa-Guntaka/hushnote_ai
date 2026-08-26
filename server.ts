@@ -37,8 +37,100 @@ interface RawSessionBuffer {
 
 let activeRawSession: RawSessionBuffer | null = null;
 
+function formatMinutes(minutes: number) {
+  return `${Math.round(minutes)} min`;
+}
+
+/**
+ * Session length, from the strongest signal actually available.
+ *
+ * Returns null rather than guessing. Time-based CPT codes are defined in
+ * minutes of psychotherapy, so an estimate that lands in the wrong band is
+ * upcoding or downcoding on a real claim — not a rounding error.
+ */
+function deriveSessionDuration(transcript: string, recordedSeconds?: number) {
+  // 1. Explicit [MM:SS] markers. The last one is the session's own clock.
+  //    Two or more are required: a single marker is a label, not a span.
+  const marks = [...transcript.matchAll(/\[(\d{1,2}):([0-5]\d)\]/g)];
+  if (marks.length >= 2) {
+    const last = marks[marks.length - 1];
+    const minutes = Number(last[1]) + Number(last[2]) / 60;
+    // The last marker opens the final exchange, so the real session runs a
+    // little longer than this. Erring short is the safe direction for coding.
+    if (minutes >= 1) {
+      return { minutes, source: 'transcript timestamps' };
+    }
+  }
+
+  // 2. The client's recording timer — measured wall-clock, not inferred.
+  if (typeof recordedSeconds === 'number' && Number.isFinite(recordedSeconds) && recordedSeconds >= 60) {
+    return { minutes: recordedSeconds / 60, source: 'recorded session length' };
+  }
+
+  /*
+   * 3. Nothing measured. Word count is deliberately NOT used as a proxy: a
+   *    transcript omits the silences, pauses and reflection that make up real
+   *    session time, so any word-derived estimate skews low and would push
+   *    sessions into a lower-paying, incorrect code band.
+   */
+  return null;
+}
+
+/**
+ * Time-defined individual psychotherapy codes, by the standard CPT bands.
+ * Below 16 minutes there is no time-based psychotherapy code to bill.
+ */
+function timeBasedCpt(minutes: number) {
+  if (minutes < 16) return null;
+  if (minutes <= 37) return { code: '90832', title: 'Psychotherapy, 30 minutes (16-37 min)' };
+  if (minutes <= 52) return { code: '90834', title: 'Psychotherapy, 45 minutes (38-52 min)' };
+  return { code: '90837', title: 'Psychotherapy, 60 minutes (53+ min)' };
+}
+
+/**
+ * Session-type codes that would REPLACE the time-based code where they apply.
+ *
+ * Keyword matching cannot establish any of these: "any thoughts of self-harm?"
+ * is routine screening rather than a crisis session, and a client mentioning a
+ * partner is not conjoint family therapy — 90847 needs that person in the room.
+ * So these are surfaced for the clinician to consider, never auto-selected.
+ */
+function detectAlternateCodes(transcript: string) {
+  const text = transcript.toLowerCase();
+  const found: Array<{ code: string; title: string; why: string }> = [];
+
+  if (/\b(intake|initial evaluation|first session|background history)\b/.test(text)) {
+    found.push({
+      code: '90791',
+      title: 'Psychiatric Diagnostic Evaluation',
+      why: 'intake or initial-evaluation language appears in the transcript'
+    });
+  }
+  if (/\b(crisis|suicidal|self-harm|emergency)\b/.test(text)) {
+    found.push({
+      code: '90839',
+      title: 'Psychotherapy for Crisis, first 60 min',
+      why: 'crisis or risk language appears — applies only to an acute crisis session, not routine risk screening'
+    });
+  }
+  if (/\b(family session|conjoint|spouse|partner)\b/.test(text)) {
+    found.push({
+      code: '90847',
+      title: 'Family Psychotherapy, conjoint with patient',
+      why: 'relational content appears — applies only if the family member was present in the session'
+    });
+  }
+  return found;
+}
+
 // Readiness evaluation logic based on purpose selection
-function calculateReadiness(purpose: string, note: any, evidence: any[]) {
+function calculateReadiness(
+  purpose: string,
+  note: any,
+  evidence: any[],
+  transcript: string = '',
+  durationSeconds?: number
+) {
   const missing: string[] = [];
   const checksPassed: string[] = [];
   
@@ -65,153 +157,115 @@ function calculateReadiness(purpose: string, note: any, evidence: any[]) {
       missing
     };
   } else {
-    // For Billing & Insurance Readiness Report (billing_insurance, billing, insurance)
-    let cpt = {
-      code: '90834',
-      title: 'Psychotherapy, 45 minutes',
-      rationale: 'Standard individual psychotherapy session duration based on transcript length (~45 mins).'
-    };
-
-    const textLower = (note.data?.join(' ') || '') + ' ' + (note.subjective?.join(' ') || '') + ' ' + (note.assessment?.join(' ') || '');
-    
-    if (textLower.includes('intake') || textLower.includes('initial evaluation') || textLower.includes('background history')) {
-      cpt = {
-        code: '90791',
-        title: 'Psychiatric Diagnostic Evaluation',
-        rationale: 'Initial diagnostic intake and comprehensive psychiatric evaluation detected.'
-      };
-    } else if (textLower.includes('crisis') || textLower.includes('suicid') || textLower.includes('emergency')) {
-      cpt = {
-        code: '90839',
-        title: 'Psychotherapy for Crisis (First 60 mins)',
-        rationale: 'High acute distress / crisis intervention documented in session transcript.'
-      };
-    } else if (textLower.includes('family') || textLower.includes('partner') || textLower.includes('spouse')) {
-      cpt = {
-        code: '90847',
-        title: 'Family Psychotherapy (Conjoint with Patient)',
-        rationale: 'Family or relational dynamics actively involved in treatment intervention.'
-      };
-    } else if (textLower.length > 800) {
-      cpt = {
-        code: '90837',
-        title: 'Psychotherapy, 60 minutes',
-        rationale: 'Extended individual psychotherapy session duration (>53 minutes).'
-      };
-    }
+    /*
+     * Billing & Insurance Readiness Report.
+     *
+     * The code is chosen from the SESSION, not from the drafted note. An
+     * earlier version measured the character length of the generated note and
+     * treated that as session duration, which meant the note's verbosity —
+     * a property of the model, not the appointment — decided the billing tier.
+     */
+    const duration = deriveSessionDuration(transcript, durationSeconds);
+    const cpt = duration ? timeBasedCpt(duration.minutes) : null;
+    const alternates = detectAlternateCodes(transcript);
 
     if (!hasDataOrSubjObj) missing.push('Detailed subjective/objective clinical data');
     if (!hasInterventionAndPlan) missing.push('Clear clinical intervention & next-step plan');
-    if (evidenceCount < 1) missing.push('Verified session duration timestamp');
+    if (!duration) missing.push('Session duration — not captured, so no time-based CPT code can be suggested');
 
-    const completed = missing.length === 0;
-    const passed = [
-      `CPT ${cpt.code} Recommended (${cpt.title})`,
-      'Session Duration Verified via Transcript',
-      'Medical Necessity Justification Linkage',
-      'Treatment Plan & Intervention Documented'
-    ];
+    // Only what actually held. The previous build returned a fixed list that
+    // claimed "Session Duration Verified via Transcript" in every response.
+    const passed: string[] = [];
+    if (hasDataOrSubjObj) passed.push('Subjective/objective clinical data documented');
+    if (hasInterventionAndPlan) passed.push('Treatment plan & intervention documented');
+    if (evidenceCount > 0) {
+      passed.push(`${evidenceCount} timestamped evidence quote${evidenceCount === 1 ? '' : 's'} linked`);
+    }
+    if (duration) {
+      passed.push(`Session duration ${formatMinutes(duration.minutes)}, from ${duration.source}`);
+    }
 
     const auditFlags = [
       'Verify medical necessity linkage to primary ICD-10 diagnosis',
-      'Confirm active session start/end time log in EHR',
-      'Sign and date note prior to insurance claim submission'
+      'Confirm session start/end times in the EHR match this note',
+      'Sign and date the note prior to claim submission'
     ];
+    for (const alt of alternates) {
+      auditFlags.push(`Consider CPT ${alt.code} (${alt.title}) instead — ${alt.why}`);
+    }
 
+    const completed = missing.length === 0;
     return {
       completed,
       label: completed ? 'Billing & Insurance Audit Ready' : 'Requires Clinical Review',
-      checksPassed: completed ? passed : checksPassed,
+      checksPassed: passed,
       missing,
-      suggestedCpt: cpt,
-      sessionDuration: '45-50 mins (Verified via audio transcript logs)',
-      medicalNecessity: 'Clinical distress, symptom presentation, and specific therapeutic intervention documented.',
+      suggestedCpt: cpt
+        ? { ...cpt, rationale: `Based on ${formatMinutes(duration!.minutes)}, from ${duration!.source}.` }
+        : null,
+      cptUnavailableReason: cpt
+        ? null
+        : duration
+          ? `Session ran ${formatMinutes(duration.minutes)}, below the 16-minute floor for a time-based psychotherapy code.`
+          : 'Session duration was not captured, so no time-based code can be suggested. Set the code in your EHR.',
+      sessionDuration: duration ? `${formatMinutes(duration.minutes)} (${duration.source})` : null,
+      // Asserted only when the note actually carries both halves of it.
+      medicalNecessity: hasDataOrSubjObj && hasInterventionAndPlan
+        ? 'Clinical distress, symptom presentation, and specific therapeutic intervention documented.'
+        : null,
       auditFlags
     };
   }
 }
 
-// Fallback intelligent note generator when external model endpoints are unreachable
-function generateFallbackNote(transcript: string, format: string, purpose: string) {
-  const lines = transcript.split('\n').filter(l => l.trim().length > 0);
-  const text = transcript.toLowerCase();
-
-  // Extract key quotes and timestamps dynamically from transcript
-  const evidence: Array<{ quote: string; timestamp: string; section: string }> = [];
-  
-  for (const line of lines) {
-    const timeMatch = line.match(/\[(\d{2}:\d{2})\]/);
-    const ts = timeMatch ? timeMatch[1] : '00:00';
-    const cleanLine = line.replace(/\[\d{2}:\d{2}\]/, '').trim();
-
-    if (cleanLine.toLowerCase().includes('client:') || cleanLine.toLowerCase().startsWith('client')) {
-      const content = cleanLine.replace(/^client:\s*/i, '').trim();
-      if (content.length > 12 && evidence.length < 6) {
-        evidence.push({
-          quote: content.length > 110 ? content.slice(0, 107) + '...' : content,
-          timestamp: ts,
-          section: evidence.length % 2 === 0 ? 'subjective' : 'data'
-        });
-      }
-    }
-  }
-
-  if (evidence.length === 0) {
-    evidence.push({
-      quote: lines[0] ? lines[0].slice(0, 80) : "Session transcript discussed with therapist",
-      timestamp: "00:00",
-      section: "data"
-    });
-  }
-
-  const noteData = {
-    data: [
-      "Client reported experiencing heightened somatic symptoms of anxiety, specifically chest tightness and morning restlessness.",
-      "Identified workplace preparation routine and deadline pressures as primary environmental triggers.",
-      "Client participated actively in exploring cognitive reframing techniques and diaphragmatic breathing."
-    ],
-    subjective: [
-      "Client states: 'My anxiety has been through the roof, especially in the mornings... chest tightness won't go away.'",
-      "Reports anxiety onset coincides with morning preparation for work transitions."
-    ],
-    objective: [
-      "Client appeared attentive, cooperative, with mild psychomotor agitation noted during discussion of work stress.",
-      "Affect was congruent with reported anxious mood. Thought processes logical and goal-directed."
-    ],
-    assessment: [
-      "Symptoms consistent with Generalized Anxiety Disorder flare-up related to workplace stress.",
-      "Client demonstrates good clinical insight and willingness to utilize cognitive reframing strategies."
-    ],
-    plan: [
-      "Continue weekly CBT focusing on cognitive reframing and diaphragmatic breathing.",
-      "Homework: Practice 5-minute morning grounding exercise prior to work commute.",
-      "Next session scheduled in 7 days."
-    ]
-  };
-
-  const missing_fields: string[] = [];
-  if (!text.includes('medication') && !text.includes('meds')) {
-    missing_fields.push('Medication adherence: Not documented');
-  }
-  if (!text.includes('risk') && !text.includes('harm') && !text.includes('suicide')) {
-    missing_fields.push('Safety / Risk assessment: Not documented in session snippet');
-  }
-
-  const readiness = calculateReadiness(purpose, noteData, evidence);
-
+/**
+ * The response when no model produced a note.
+ *
+ * This returns NO clinical content, deliberately. An earlier version of this
+ * function returned fixed prose about anxiety and chest tightness regardless of
+ * what the transcript said, and once rendered it was indistinguishable from a
+ * real draft — the precise failure a clinical tool must not have. Empty sections
+ * plus an explicit unavailable state is the only honest answer.
+ *
+ * Two things are deliberately NOT done here:
+ *
+ *  1. calculateReadiness() is not called. It scores a drafted note — sections
+ *     documented, plan present, evidence linked — and recommends a CPT code.
+ *     None of that is meaningful when nothing was drafted.
+ *  2. No evidence quotes are extracted. Pulling real quotes out of the
+ *     transcript would be accurate but misleading: it implies the session was
+ *     analysed and a note was grounded in it, when neither happened.
+ *
+ * The transcript itself is untouched and still held in activeRawSession, so the
+ * therapist loses nothing by drafting again once the model is up.
+ */
+function buildUnavailableResponse(format: string, purpose: string) {
   return {
     format,
-    note: noteData,
-    evidence,
-    missing_fields,
-    readiness
+    purpose,
+    note: {
+      data: [],
+      subjective: [],
+      objective: [],
+      assessment: [],
+      plan: []
+    },
+    evidence: [],
+    missing_fields: [],
+    readiness: {
+      completed: false,
+      unavailable: true,
+      label: 'Not drafted — model unavailable',
+      checksPassed: [],
+      missing: []
+    }
   };
 }
 
 // POST /api/generate-note
 app.post('/api/generate-note', async (req: Request, res: Response) => {
   try {
-    const { transcript, format = 'DAP', purpose = 'progress', model = 'gemma4' } = req.body;
+    const { transcript, format = 'DAP', purpose = 'progress', model = 'gemma4', durationSeconds } = req.body;
 
     if (!transcript || typeof transcript !== 'string' || !transcript.trim()) {
       return res.status(400).json({ error: 'Transcript content is required.' });
@@ -262,11 +316,14 @@ Return a JSON object with this EXACT structure:
 
     let resultJson: any = null;
     let aiSource = 'ollama_gemma';
+    // Why the local model produced nothing. This is not diagnostics — the client
+    // shows it to the therapist to explain why no note could be drafted.
+    let ollamaError: string | null = null;
 
     // Local-only Ollama generation (gemma4 by default)
     const ollamaBaseUrl = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
+    const modelName = model || process.env.OLLAMA_MODEL || 'gemma4';
     if (!resultJson && ollamaBaseUrl) {
-      const modelName = model || process.env.OLLAMA_MODEL || 'gemma4';
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout for local model generation
@@ -299,26 +356,40 @@ Return a JSON object with this EXACT structure:
               }
             }
           }
+          if (!resultJson) {
+            ollamaError = `the model "${modelName}" returned no usable JSON`;
+          }
+        } else {
+          ollamaError = `the model server replied ${ollamaResponse.status} — check that "${modelName}" has been pulled`;
         }
       } catch (ollamaErr: any) {
-        // Gracefully ignore local network timeouts
+        ollamaError = ollamaErr?.name === 'AbortError'
+          ? 'the local model did not respond within 60 seconds'
+          : `the local model could not be reached (${ollamaErr?.message || 'unknown error'})`;
       }
     }
 
     // 3. Process structured note result or fallback
     if (resultJson && resultJson.note) {
-      const readiness = calculateReadiness(purpose, resultJson.note, resultJson.evidence || []);
+      const readiness = calculateReadiness(purpose, resultJson.note, resultJson.evidence || [], transcript, durationSeconds);
       resultJson.readiness = readiness;
       resultJson.purpose = purpose;
-      return res.json({ success: true, source: aiSource, ...resultJson });
+      // Trust fields go LAST: model output must not be able to claim its own provenance.
+      return res.json({ ...resultJson, success: true, source: aiSource, fallback: false, model: modelName });
     }
 
-    // Otherwise use intelligent structured local fallback note generator
-    const fallback = generateFallbackNote(transcript, format, purpose);
+    /*
+     * No model output. The response carries empty sections and an explicit
+     * unavailable state — never invented content — and must not be attributable
+     * to the drafting engine. `fallback: true` is what the client gates on;
+     * `source` is deliberately not an engine name.
+     */
     return res.json({
+      ...buildUnavailableResponse(format, purpose),
       success: true,
-      source: 'local_gemma_engine',
-      ...fallback
+      source: 'fallback_offline',
+      fallback: true,
+      fallbackReason: `HushNote could not draft this note because ${ollamaError || `no local model was reachable at ${ollamaBaseUrl}`}.`
     });
 
   } catch (error: any) {

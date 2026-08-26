@@ -418,6 +418,10 @@
       <span>Back to purpose</span>
     </button>
 
+    <!-- Model-unavailable warning. Filled by app.js only when the server
+         reports fallback:true; stays empty and hidden on a real draft. -->
+    <div id="fallbackNotice" hidden></div>
+
     <div class="flex flex-col gap-4 border-b border-line pb-6 md:flex-row md:items-center md:justify-between">
       <div class="space-y-1">
         <p class="flex items-center gap-2 text-overline uppercase text-ink-muted">
@@ -442,7 +446,7 @@
               <svg class="icon size-5 text-accent" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"/></svg>
               <span>Clinical Progress Note</span>
             </h2>
-            <span class="inline-flex items-center rounded-full border border-line bg-accent-soft px-3 py-1 text-overline uppercase text-accent-ink">Editable</span>
+            <span id="noteEditableBadge" class="inline-flex items-center rounded-full border border-line bg-accent-soft px-3 py-1 text-overline uppercase text-accent-ink">Editable</span>
           </div>
           <div id="noteBody" class="space-y-5"></div>
         </section>
@@ -488,7 +492,7 @@
           <h1 id="success-title" tabindex="-1" class="font-display text-display-lg font-bold tracking-tight text-ink outline-none">
             The note is yours
           </h1>
-          <p class="mx-auto max-w-[20rem] font-display text-lg italic text-ink-muted">Everything else is gone.</p>
+          <p id="success-sub" class="mx-auto max-w-[20rem] font-display text-lg italic text-ink-muted">Everything else is gone.</p>
         </div>
 
         <p class="flex items-center justify-center gap-2 text-body-sm text-ink-muted">
