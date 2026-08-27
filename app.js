@@ -31,6 +31,19 @@ const state = {
   isRecording: false,
   mediaRecorder: null,
   speechRecognition: null,
+  // The one microphone stream both consumers are gated behind. Held so it can
+  // be released explicitly — an unreleased stream keeps the OS mic light on.
+  micStream: null,
+  // 'idle' | 'requesting' | 'live' | 'failed' | 'stopped'. The recording
+  // screen paints entirely from this, so nothing can claim to be capturing
+  // before getUserMedia has actually resolved.
+  micState: 'idle',
+  // Set when recognition hits an error retrying cannot fix, so onend stops
+  // trying instead of looping. speechRestarts bounds the benign case.
+  speechFatal: false,
+  speechRestarts: 0,
+  audioContext: null,
+  waveformFrame: null,
   audioChunks: [],
   audioUrl: null,
   recordingSeconds: 0,
@@ -562,21 +575,223 @@ function updateSpeechStatus(text, type = 'active') {
     if (elements.speechStatusText) elements.speechStatusText.textContent = text;
   }
 }
+/* ------------------------------------------------------------------ *
+ * Recording
+ * ------------------------------------------------------------------ */
+
+/*
+ * One getUserMedia call gates the whole session.
+ *
+ * The previous flow started the timer and the "Recording session" badge at
+ * click time, then let SpeechRecognition and getUserMedia ask for the
+ * microphone independently. Two consumers raced for the device, and because no
+ * part of the UI depended on either of them succeeding, a total failure looked
+ * exactly like a working session.
+ *
+ * Now getUserMedia resolves first and proves the device is actually available.
+ * Only then do the two consumers start, and only then does anything on screen
+ * claim to be recording:
+ *
+ *   SpeechRecognition — live transcription. This is the one that matters: the
+ *     transcript is what the note gets drafted from. Chrome will not accept an
+ *     existing MediaStream, so it necessarily opens its own capture; starting
+ *     it *after* permission is granted means it reuses that decision instead of
+ *     racing a second prompt.
+ *   MediaRecorder — raw audio for local playback only. It is never transcribed
+ *     and never leaves the browser, so if it fails the session still continues
+ *     on the transcript alone.
+ *
+ * Speech being primary is why a speech failure downgrades the session to typed
+ * entry, while a MediaRecorder failure is merely logged.
+ */
+
+const MIC_STATE = {
+  idle: {
+    label: 'Preparing',
+    badge: 'bg-surface text-ink-muted',
+    dot: 'bg-ink-subtle',
+    pulse: false,
+  },
+  requesting: {
+    label: 'Waiting for microphone',
+    badge: 'bg-slate-soft text-slate-ink',
+    dot: 'bg-slate',
+    pulse: true,
+  },
+  live: {
+    label: 'Recording session',
+    badge: 'bg-danger-soft text-rec',
+    dot: 'bg-rec',
+    pulse: true,
+  },
+  failed: {
+    label: 'Not recording',
+    badge: 'bg-danger-soft text-danger',
+    dot: 'bg-danger',
+    pulse: false,
+  },
+  stopped: {
+    label: 'Recording stopped',
+    badge: 'bg-surface text-ink-muted',
+    dot: 'bg-ink-subtle',
+    pulse: false,
+  },
+};
 
 /**
- * Start Web Speech API Recognition
+ * The single place the recording screen's truth is painted.
+ *
+ * Everything that reads as "we are capturing" — the badge, the timer's
+ * prominence, the waveform's motion, the retry button — is derived from here,
+ * so none of it can drift out of step with the actual device state again.
+ */
+function setMicState(next, detail = '') {
+  state.micState = next;
+  const tone = MIC_STATE[next] || MIC_STATE.idle;
+
+  const indicator = document.getElementById('recordingIndicator');
+  if (indicator) {
+    indicator.className =
+      `inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1 text-overline uppercase ${tone.badge}`;
+    indicator.innerHTML =
+      `<span aria-hidden="true" class="size-1.5 shrink-0 rounded-full ${tone.dot}${tone.pulse ? ' animate-pulse' : ''}"></span>` +
+      `<span id="recordingIndicatorText"></span>`;
+    const text = document.getElementById('recordingIndicatorText');
+    if (text) text.textContent = tone.label;
+  }
+
+  // The timer only counts real captured time, so it recedes when nothing is.
+  if (elements.recordingTimer) {
+    elements.recordingTimer.style.opacity = next === 'live' ? '1' : '0.4';
+  }
+
+  const waveform = document.getElementById('waveform');
+  if (waveform) waveform.classList.toggle('waveform-idle', next !== 'live');
+
+  const panel = document.getElementById('micErrorPanel');
+  const panelText = document.getElementById('micErrorText');
+  if (panel) panel.hidden = next !== 'failed';
+  if (panelText && next === 'failed') panelText.textContent = detail;
+
+  // The old "Start Rec" button becomes the retry affordance, shown only when
+  // there is something to retry.
+  if (elements.startRecordingBtn) {
+    elements.startRecordingBtn.hidden = next !== 'failed';
+    elements.startRecordingBtn.disabled = false;
+  }
+}
+
+/** Turns a getUserMedia rejection into something a clinician can act on. */
+function describeMicError(err) {
+  const name = err && err.name;
+  if (name === 'NotAllowedError' || name === 'SecurityError') {
+    return 'Microphone access was blocked. Allow it for this site in your browser, then try again.';
+  }
+  if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+    return 'No microphone was found. Connect one, then try again.';
+  }
+  if (name === 'NotReadableError' || name === 'TrackStartError') {
+    return 'The microphone is in use by another application. Close it, then try again.';
+  }
+  return `The microphone could not be started (${(err && err.message) || 'unknown error'}).`;
+}
+
+/* ---- live waveform ---- */
+
+/**
+ * Drives the bars from the actual signal.
+ *
+ * Without this the bars animate on CSS keyframes whether or not anything is
+ * being heard, which is precisely the lie this whole change is removing.
+ */
+function startWaveformMeter(stream) {
+  stopWaveformMeter();
+
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) return;
+
+  try {
+    const ctx = new AudioCtx();
+    const source = ctx.createMediaStreamSource(stream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 64;
+    analyser.smoothingTimeConstant = 0.75;
+    source.connect(analyser);
+
+    const bars = Array.from(document.querySelectorAll('#waveform .waveform-bar'));
+    const buffer = new Uint8Array(analyser.frequencyBinCount);
+
+    state.audioContext = ctx;
+
+    const frame = () => {
+      analyser.getByteFrequencyData(buffer);
+      for (let i = 0; i < bars.length; i += 1) {
+        // Mirror the spectrum around the centre so the shape reads as one form.
+        const mid = (bars.length - 1) / 2;
+        const bin = Math.floor((Math.abs(i - mid) / mid) * (buffer.length - 1));
+        const level = buffer[bin] / 255;
+        bars[i].style.transform = `scaleY(${Math.max(0.1, level)})`;
+      }
+      state.waveformFrame = window.requestAnimationFrame(frame);
+    };
+    frame();
+  } catch (err) {
+    // A missing meter is cosmetic; never let it take the session down.
+    console.error('[HushNote Audio] Waveform meter failed to start:', err);
+  }
+}
+
+function stopWaveformMeter() {
+  if (state.waveformFrame) {
+    window.cancelAnimationFrame(state.waveformFrame);
+    state.waveformFrame = null;
+  }
+  if (state.audioContext) {
+    try {
+      state.audioContext.close();
+    } catch (err) {
+      console.error('[HushNote Audio] Could not close the audio context:', err);
+    }
+    state.audioContext = null;
+  }
+  document.querySelectorAll('#waveform .waveform-bar').forEach(bar => {
+    bar.style.transform = '';
+  });
+}
+
+/* ---- speech ---- */
+
+// Errors that mean retrying is pointless. Anything else (a network blip, a
+// silence timeout) is a normal end that continuous mode expects us to resume.
+const SPEECH_FATAL_ERRORS = new Set(['not-allowed', 'service-not-allowed', 'audio-capture']);
+const MAX_SPEECH_RESTARTS = 20;
+
+/**
+ * Start Web Speech API Recognition.
+ *
+ * Only ever called after getUserMedia has resolved, so a permission prompt is
+ * already settled by this point.
  */
 function startSpeechRecognition() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
-    console.warn('[HushNote Speech] Web Speech API not supported in this browser environment.');
-    updateSpeechStatus('Speech API unavailable - Type/Paste notes', 'warning');
-    return;
+    console.error('[HushNote Speech] Web Speech API unavailable in this browser.');
+    updateSpeechStatus('No live transcription — type or paste', 'warning');
+    return false;
   }
+
+  state.speechFatal = false;
+  state.speechRestarts = 0;
 
   try {
     if (state.speechRecognition) {
-      try { state.speechRecognition.stop(); } catch (e) {}
+      try {
+        state.speechRecognition.onend = null;
+        state.speechRecognition.stop();
+      } catch (err) {
+        console.error('[HushNote Speech] Could not stop the previous recogniser:', err);
+      }
+      state.speechRecognition = null;
     }
 
     const recognition = new SpeechRecognition();
@@ -585,8 +800,8 @@ function startSpeechRecognition() {
     recognition.lang = 'en-US';
 
     recognition.onstart = () => {
-      console.log('[HushNote Speech] Real-time speech recognition active.');
-      updateSpeechStatus('Listening to voice...', 'active');
+      console.log('[HushNote Speech] Live transcription active.');
+      updateSpeechStatus('Listening', 'active');
     };
 
     recognition.onresult = (event) => {
@@ -607,10 +822,7 @@ function startSpeechRecognition() {
 
       const currentSpeech = (state.speechTranscriptBuffer + interimTranscript).trim();
       const initialText = state.baseTranscript ? state.baseTranscript.trim() : '';
-
-      const updatedFullText = initialText 
-        ? `${initialText}\n${currentSpeech}`
-        : currentSpeech;
+      const updatedFullText = initialText ? `${initialText}\n${currentSpeech}` : currentSpeech;
 
       if (updatedFullText) {
         state.transcript = updatedFullText;
@@ -621,75 +833,185 @@ function startSpeechRecognition() {
       }
     };
 
-    recognition.onerror = (err) => {
-      console.warn('[HushNote Speech] Recognition error:', err.error);
-      if (err.error === 'not-allowed' || err.error === 'service-not-allowed') {
-        updateSpeechStatus('Mic blocked - Type/Paste or load sample', 'warning');
+    recognition.onerror = (event) => {
+      const code = event && event.error;
+      if (SPEECH_FATAL_ERRORS.has(code)) {
+        // Fatal: mark it so onend stops trying instead of spinning forever.
+        state.speechFatal = true;
+        console.error('[HushNote Speech] Fatal recognition error:', code);
+        updateSpeechStatus('Transcription stopped — type or paste', 'warning');
+        setMicState('failed', describeMicError({ name: 'NotAllowedError' }));
+      } else {
+        console.error('[HushNote Speech] Recognition error:', code);
       }
     };
 
     recognition.onend = () => {
-      if (state.isRecording) {
-        try { recognition.start(); } catch (e) {}
-      } else {
-        updateSpeechStatus('Recording stopped', 'idle');
+      /*
+       * Continuous recognition ends on its own regularly, so a restart is
+       * normal — but only while the session is genuinely running and nothing
+       * fatal has happened. The old version restarted purely on isRecording,
+       * which a failed session never cleared, so it looped indefinitely.
+       */
+      if (!state.isRecording || state.speechFatal) {
+        if (!state.speechFatal) updateSpeechStatus('Recording stopped', 'idle');
+        return;
+      }
+
+      state.speechRestarts += 1;
+      if (state.speechRestarts > MAX_SPEECH_RESTARTS) {
+        state.speechFatal = true;
+        console.error('[HushNote Speech] Restart limit reached; giving up on live transcription.');
+        updateSpeechStatus('Transcription stopped — type or paste', 'warning');
+        return;
+      }
+
+      try {
+        recognition.start();
+      } catch (err) {
+        state.speechFatal = true;
+        console.error('[HushNote Speech] Could not resume recognition:', err);
+        updateSpeechStatus('Transcription stopped — type or paste', 'warning');
       }
     };
 
     recognition.start();
     state.speechRecognition = recognition;
+    return true;
   } catch (err) {
-    console.warn('[HushNote Speech] Failed starting SpeechRecognition:', err);
-    updateSpeechStatus('Type/Paste or load sample', 'idle');
+    console.error('[HushNote Speech] Failed to start recognition:', err);
+    updateSpeechStatus('No live transcription — type or paste', 'warning');
+    return false;
   }
 }
 
-/**
- * Audio Recording Flow using getUserMedia and MediaRecorder
- */
+/* ---- the session ---- */
+
+/** Releases the device. Safe to call when nothing is running. */
+function releaseMicStream() {
+  if (state.micStream) {
+    state.micStream.getTracks().forEach(track => {
+      try {
+        track.stop();
+      } catch (err) {
+        console.error('[HushNote Audio] Could not stop a microphone track:', err);
+      }
+    });
+    state.micStream = null;
+  }
+}
+
+/** Everything the recording path owns, torn down in one place. */
+function teardownRecording() {
+  stopTimer();
+  stopWaveformMeter();
+
+  if (state.speechRecognition) {
+    try {
+      // Detach onend first, or stopping triggers the restart path.
+      state.speechRecognition.onend = null;
+      state.speechRecognition.stop();
+    } catch (err) {
+      console.error('[HushNote Speech] Could not stop recognition:', err);
+    }
+    state.speechRecognition = null;
+  }
+
+  if (state.mediaRecorder) {
+    try {
+      if (state.mediaRecorder.state !== 'inactive') state.mediaRecorder.stop();
+    } catch (err) {
+      console.error('[HushNote Audio] Could not stop the recorder:', err);
+    }
+    state.mediaRecorder = null;
+  }
+
+  releaseMicStream();
+
+  state.isRecording = false;
+  state.speechFatal = false;
+  state.speechRestarts = 0;
+}
+
 async function startAudioRecording() {
+  // Never stack a second attempt on top of a live one.
+  teardownRecording();
+
   state.audioChunks = [];
-  state.isRecording = true;
   state.recordingSeconds = 0;
   state.speechTranscriptBuffer = '';
-  
-  if (elements.startRecordingBtn) elements.startRecordingBtn.disabled = true;
-  if (elements.stopRecordingBtn) elements.stopRecordingBtn.disabled = false;
+  updateTimerDisplay();
 
-  startTimer();
-  startSpeechRecognition();
+  if (elements.stopRecordingBtn) elements.stopRecordingBtn.disabled = false;
+  if (elements.startRecordingBtn) elements.startRecordingBtn.disabled = true;
+
+  // Nothing claims to be recording yet — permission has not been settled.
+  setMicState('requesting');
+  updateSpeechStatus('Waiting for microphone', 'idle');
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    const detail = window.isSecureContext === false
+      ? 'The browser only allows microphone access over HTTPS or on localhost. Open the app at http://localhost:3000.'
+      : 'This browser does not support microphone capture.';
+    console.error('[HushNote Audio] getUserMedia unavailable.', { isSecureContext: window.isSecureContext });
+    setMicState('failed', detail);
+    updateSpeechStatus('No microphone — type or paste', 'warning');
+    return false;
+  }
+
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    // A failure must look like a failure: no timer, no rec badge, no waveform.
+    console.error('[HushNote Audio] getUserMedia rejected:', err);
+    state.isRecording = false;
+    stopTimer();
+    setMicState('failed', describeMicError(err));
+    updateSpeechStatus('No microphone — type or paste', 'warning');
+    return false;
+  }
+
+  // Permission is settled and the device is ours. Only now is this a session.
+  state.micStream = stream;
+  state.isRecording = true;
 
   try {
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      state.mediaRecorder = new MediaRecorder(stream);
-
-      state.mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          state.audioChunks.push(event.data);
-        }
-      };
-
-      state.mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(state.audioChunks, { type: 'audio/webm' });
-        state.audioUrl = URL.createObjectURL(audioBlob);
-        if (elements.audioPlayback) {
-          elements.audioPlayback.src = state.audioUrl;
-          elements.audioPlayback.hidden = false;
-        }
-        console.log('[HushNote Audio] Temporary audio snippet created in memory.');
-      };
-
-      state.mediaRecorder.start();
-      console.log('[HushNote Audio] Microphone recording started.');
-    } else {
-      console.warn('[HushNote Audio] getUserMedia not available; using simulated timer mode.');
-      updateSpeechStatus('Timer mode (No mic stream)', 'warning');
-    }
+    const recorder = new MediaRecorder(stream);
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) state.audioChunks.push(event.data);
+    };
+    recorder.onstop = () => {
+      const audioBlob = new Blob(state.audioChunks, { type: 'audio/webm' });
+      state.audioUrl = URL.createObjectURL(audioBlob);
+      if (elements.audioPlayback) {
+        elements.audioPlayback.src = state.audioUrl;
+        elements.audioPlayback.hidden = false;
+      }
+    };
+    recorder.onerror = (event) => {
+      console.error('[HushNote Audio] Recorder error:', event && event.error);
+    };
+    recorder.start();
+    state.mediaRecorder = recorder;
+    console.log('[HushNote Audio] Recording started.');
   } catch (err) {
-    console.warn('[HushNote Audio] Microphone permission denied or unhandled:', err.message);
-    updateSpeechStatus('Mic access blocked - Type/Paste or load sample', 'warning');
+    /*
+     * Audio capture only feeds local playback, so its failure does not end the
+     * session — the transcript is what the note is drafted from. Say so rather
+     * than pretending the recorder is running.
+     */
+    console.error('[HushNote Audio] MediaRecorder could not start:', err);
+    state.mediaRecorder = null;
   }
+
+  // The UI becomes "recording" here, and nowhere earlier.
+  setMicState('live');
+  startTimer();
+  startWaveformMeter(stream);
+  startSpeechRecognition();
+
+  return true;
 }
 
 function autoStartRecordingOrTimer() {
@@ -697,29 +1019,19 @@ function autoStartRecordingOrTimer() {
 }
 
 function stopAudioRecording() {
-  state.isRecording = false;
-  stopTimer();
+  const wasRecording = state.isRecording;
 
-  if (state.speechRecognition) {
-    try {
-      state.speechRecognition.stop();
-    } catch (e) {}
-    state.speechRecognition = null;
-  }
-
-  if (state.mediaRecorder && state.mediaRecorder.state !== 'inactive') {
-    state.mediaRecorder.stop();
-    // Stop microphone stream tracks to release device
-    state.mediaRecorder.stream?.getTracks().forEach(track => track.stop());
-  }
-
+  teardownRecording();
+  setMicState('stopped');
   updateSpeechStatus('Recording stopped', 'idle');
+
+  if (!wasRecording) {
+    console.log('[HushNote Audio] Stopped without an active capture; continuing with typed text.');
+  }
+
   showScreen('format-screen');
 }
-
-/**
- * Recording Timer Helper
- */
+/** Recording timer. Counts only time the microphone was actually live. */
 function startTimer() {
   stopTimer();
   state.recordingSeconds = 0;
@@ -1279,7 +1591,15 @@ async function executeApproveAndDelete() {
  * Reset App State for a new session
  */
 function resetSessionState() {
-  stopTimer();
+  /*
+   * Tear the recording path down rather than only stopping the timer. This
+   * previously left isRecording true, a stale mediaRecorder, and a live
+   * recogniser behind, so a second session inherited the first one's broken
+   * state — and an undead recogniser kept the microphone indicator lit.
+   */
+  teardownRecording();
+  setMicState('idle');
+
   state.recordingSeconds = 0;
   state.consentGiven = false;
   state.audioChunks = [];
@@ -1329,5 +1649,8 @@ window.HushNoteApp = {
   renderReviewScreen,
   // The accessor for the note as edited. Anything reading the note downstream
   // should come through here rather than at state.generatedNoteResponse.note.
-  getFinalNote
+  getFinalNote,
+  setMicState,
+  teardownRecording,
+  startSpeechRecognition
 };

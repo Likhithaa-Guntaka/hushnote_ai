@@ -309,12 +309,23 @@
 }
 
 /*
- * Waveform bars: the synthetic (no-mic) animation. A live stream overrides
- * `transform` per frame from JS, which wins over the animation only while it
- * is running — so the class is removed rather than fought with.
+ * Waveform bars.
+ *
+ * While the microphone is live, app.js writes `transform` on each bar per frame
+ * from an AnalyserNode, so the motion is the actual signal. The keyframe
+ * animation below is only the fallback shimmer; `.waveform-idle` parks the bars
+ * flat whenever nothing is being captured, so a still waveform reliably means
+ * "not recording" rather than "the animation happens to be at rest".
  */
 .waveform-bar {
   animation: pulse-bar var(--bar-duration, 1s) ease-in-out var(--bar-delay, 0ms) infinite;
+  transition: transform 90ms linear;
+}
+
+.waveform-idle .waveform-bar {
+  animation-play-state: paused;
+  transform: scaleY(0.1);
+  opacity: 0.35;
 }
 
 .sr-only {
