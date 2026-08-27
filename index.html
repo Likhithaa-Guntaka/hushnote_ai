@@ -197,16 +197,32 @@
     </button>
 
     <div class="flex flex-col items-center gap-4 text-center">
-      <span class="inline-flex items-center gap-1.5 rounded-full border border-line bg-danger-soft px-3 py-1 text-overline uppercase text-rec">
-        <span aria-hidden="true" class="size-1.5 shrink-0 animate-pulse rounded-full bg-rec"></span>
-        <span>Recording session</span>
+      <!-- Painted by app.js from the real microphone state. It must never claim
+           "Recording session" before getUserMedia has actually resolved. -->
+      <span id="recordingIndicator" role="status" aria-live="polite"
+        class="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1 text-overline uppercase text-ink-muted">
+        <span aria-hidden="true" class="size-1.5 shrink-0 rounded-full bg-ink-subtle"></span>
+        <span id="recordingIndicatorText">Preparing</span>
       </span>
 
       <p id="recordingTimer" aria-hidden="true"
-        class="font-display text-[clamp(3rem,8vw,4.5rem)] font-bold leading-none tracking-tight text-clay tabular-nums">00:00</p>
+        class="font-display text-[clamp(3rem,8vw,4.5rem)] font-bold leading-none tracking-tight text-clay tabular-nums transition-opacity duration-300">00:00</p>
 
-      <!-- 28 amplitude bars, populated by app.js so the markup stays readable. -->
-      <div id="waveform" aria-hidden="true" class="flex h-10 items-center justify-center gap-[2px]"></div>
+      <!-- 28 bars. Driven from a real AnalyserNode while the mic is live, and
+           parked flat otherwise, so the motion means something. -->
+      <div id="waveform" aria-hidden="true" class="waveform-idle flex h-10 items-center justify-center gap-[2px]"></div>
+    </div>
+
+    <!-- Shown only when the microphone genuinely failed. -->
+    <div id="micErrorPanel" role="alert" class="flex items-start gap-3.5 rounded-card border border-danger bg-danger-soft p-5" hidden>
+      <svg class="icon size-5 mt-0.5 shrink-0 text-danger" viewBox="0 0 24 24" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+      <div class="space-y-2">
+        <p class="font-display text-title font-semibold text-danger">Not recording</p>
+        <p id="micErrorText" class="text-body-sm leading-relaxed text-ink"></p>
+        <p class="text-body-sm leading-relaxed text-ink-muted">
+          You can still type or paste the session below, or load the sample transcript.
+        </p>
+      </div>
     </div>
 
     <audio id="audioPlayback" controls class="w-full rounded-control border border-line" hidden></audio>
@@ -244,7 +260,7 @@
       <button id="startRecordingBtn" type="button" hidden
         class="inline-flex min-h-12 items-center justify-center gap-2 rounded-control border border-line bg-card px-6 py-3 font-display text-body font-semibold text-accent shadow-e1 transition-colors duration-200 hover:bg-surface">
         <svg class="icon size-5" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19v3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><rect x="9" y="2" width="6" height="13" rx="3"/></svg>
-        <span>Start Rec</span>
+        <span id="startRecordingLabel">Try microphone again</span>
       </button>
 
       <button id="stopRecordingBtn" type="button"
