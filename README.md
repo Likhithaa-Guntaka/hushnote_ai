@@ -4,7 +4,6 @@
 HushNote is a local-first, privacy-focused clinical note drafting prototype designed to help mental health professionals draft structured DAP and SOAP notes from session audio snippets without compromising client confidentiality or storing raw audio data permanently.
 
 ---
-
 ## Key Features & Privacy Architecture
 
 - **Local-First LLM Processing**: Interacts directly with a local **Ollama** instance running Gemma (`gemma4` by default; override with `OLLAMA_MODEL`).
