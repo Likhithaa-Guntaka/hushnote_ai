@@ -1,11 +1,12 @@
 import tailwindcss from '@tailwindcss/vite';
-import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss()],
+    // Tailwind only. The app is a static index.html plus a plain app.js, so
+    // Vite is here to compile src/index.css and to serve the page in dev.
+    plugins: [tailwindcss()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
